@@ -2,7 +2,7 @@
 
 ## Current repository status
 
-This is a foundation build, not a completed or audited messaging service. The UI is responsive and includes theme persistence, reduced-motion support, client-side form checks, and a registration API integration point. The registration route currently creates an OTP challenge and attempts Gmail delivery when configured; it deliberately does not create an account or claim verification succeeded.
+This is a foundation build, not a completed or audited messaging service. The UI is responsive and includes theme persistence, reduced-motion support, client-side form checks, and a registration API integration point. Registration and login endpoints deliberately return 503 until secure verification, password handling, uniqueness reservations, and session lifecycle are implemented.
 
 ## Trust boundaries
 
