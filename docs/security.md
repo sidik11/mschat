@@ -5,9 +5,7 @@
 - No secret values are committed; `.env.example` contains placeholders.
 - Firebase Admin initialization is server-side.
 - Default Firebase rules deny client reads and writes.
-- Registration input is validated server-side; username normalization is case-insensitive.
-- Registration is rejected when session/email service configuration is missing.
-- OTP values are not logged; the digest is keyed with a server-only secret.
+- Registration and login endpoints fail closed with 503 while secure authentication is not implemented.
 - Health response reports whether integrations appear configured, not credentials.
 - UI honors `prefers-reduced-motion`.
 
