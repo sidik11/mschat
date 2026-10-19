@@ -157,6 +157,8 @@ export default function Chat({ user, onLogout }) {
     if (!activeFriend || !remoteKey || !file) return;
     if (file.size < 1 || file.size > 50 * 1024 * 1024) { setError('Choose a file between 1 byte and 50 MB.'); return; }
     const mimeType = file.type || 'application/octet-stream';
+    const supportedTypes = ['image/jpeg','image/png','image/webp','image/avif','video/mp4','video/webm','application/pdf','text/plain','application/zip','application/msword','application/vnd.ms-excel','application/vnd.ms-powerpoint','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.openxmlformats-officedocument.presentationml.presentation'];
+    if (!supportedTypes.includes(mimeType) || !(await hasExpectedSignature(file,mimeType))) { setError('The file type or content signature is unsupported or invalid.'); return; }
     const mediaType = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'document';
     if (mediaType === 'video') {
       const duration = await new Promise(resolve => { const video = document.createElement('video'); const url = URL.createObjectURL(file); video.preload = 'metadata'; video.onloadedmetadata = () => { const d = video.duration; URL.revokeObjectURL(url); resolve(d); }; video.onerror = () => { URL.revokeObjectURL(url); resolve(Infinity); }; video.src = url; });
