@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { json, method, requireOrigin, session, rootRef, safeError } from '../../lib/core.js';
+import { json, method, requireOrigin, session, rootRef, safeError, consumeRateLimit, rateLimitKey } from '../../lib/core.js';
 import { r2Client, signPut } from '../../lib/r2.js';
 export default async function handler(req, res) {
   if (!method(req, res, ['POST']) || !requireOrigin(req, res)) return;
   try {
     const auth = await session(req); if (!auth) return json(res, 401, { error: 'UNAUTHENTICATED' });
+    if (!(await consumeRateLimit(rateLimitKey(req, 'attachment-upload:' + auth.uid), 10, 60 * 60 * 1000))) return json(res, 429, { error: 'RATE_LIMITED' });
     const conversationId = String(req.body?.conversationId || '');
     const fileName = String(req.body?.fileName || '').replace(/[\\/\\u0000-\\u001f]/g, '_').slice(0, 180);
     const size = Number(req.body?.size);
