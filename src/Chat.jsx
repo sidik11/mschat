@@ -116,7 +116,7 @@ export default function Chat({ user, onLogout }) {
       const complete = await post('/api/attachments/complete', { attachmentId: upload.attachmentId });
       const payload = { type: 'attachment', attachmentId: complete.attachment.id, fileName: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, fileIv: encrypted.iv };
       const encryptedMessage = await encryptText(remoteKey, JSON.stringify(payload));
-      const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encryptedMessage, keyVersion: 1 });
+      const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encryptedMessage, keyVersion: 1, attachmentId: payload.attachmentId });
       setMessages(old => [...old, { id: result.id, senderId: user.id, text: file.name, attachment: payload, createdAt: result.createdAt, deliveredTo: {}, readBy: {} }]);
       setTransferProgress({ name: file.name, progress: 100, phase: 'Sent securely' });
       setTimeout(() => setTransferProgress(null), 2500);
