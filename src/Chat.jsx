@@ -42,7 +42,7 @@ export default function Chat({ user, onLogout }) {
     let cancelled = false;
     (async () => {
       try {
-        const pair = await getOrCreateDeviceKey();
+        const pair = await getOrCreateDeviceKey(user.id);
         await post('/api/keys', { publicKey: pair.publicJwk });
         const me = await api('/api/keys');
         if (!cancelled) { setPrivateKey(pair.privateKey); setMyPublicKey(me.publicKey || pair.publicJwk); }
