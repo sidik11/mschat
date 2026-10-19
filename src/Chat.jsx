@@ -135,7 +135,7 @@ export default function Chat({ user, onLogout }) {
       const blob = new Blob([clear], { type: attachment.mimeType || 'application/octet-stream' });
       const url = URL.createObjectURL(blob), a = document.createElement('a');
       a.href = url; a.download = attachment.fileName || 'attachment'; a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) { setError(e.message); }
   }
 
