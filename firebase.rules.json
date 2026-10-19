@@ -14,7 +14,8 @@
       },
       "complaints": {
         ".indexOn": [
-          "userId"
+          "userId",
+          "createdAt"
         ]
       },
       "users": {
