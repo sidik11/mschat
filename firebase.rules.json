@@ -7,8 +7,15 @@
       ".write": false,
       "messages": {
         "$conversationId": {
-          ".indexOn": ["createdAt"]
+          ".indexOn": [
+            "createdAt"
+          ]
         }
+      },
+      "complaints": {
+        ".indexOn": [
+          "userId"
+        ]
       }
     }
   }
