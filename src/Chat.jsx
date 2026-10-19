@@ -138,11 +138,12 @@ export default function Chat({ user, onLogout }) {
         setMessages(decoded);
         const typingState = await api('/api/typing?conversationId=' + encodeURIComponent(activeFriend.conversationId));
         if (!cancelled) setIsFriendTyping(Boolean(typingState.typing));
-        const unread = decoded.filter(m => m.senderId !== user.id && !m.deletedForEveryone);
+        const unreadIds = new Set(data.unreadMessageIds || []);
+        const unread = decoded.filter(m => m.senderId !== user.id && !m.deletedForEveryone && unreadIds.has(m.id));
         for (const m of unread) {
           try {
             if (!m.deliveredTo?.[user.id]) await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'delivered' });
-            if (privacySettings.readReceiptsEnabled && !m.readBy?.[user.id]) await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'read' });
+            await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'read', shareReceipt: privacySettings.readReceiptsEnabled });
           } catch {}
         }
       } catch {}
