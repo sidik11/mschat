@@ -1,4 +1,4 @@
-import { json, method } from '../_lib/core.js';
+import { json, method } from '../../lib/core.js';
 export default async function handler(req, res) {
   if (!method(req, res, ['GET'])) return;
   res.setHeader('Cache-Control', 'no-store');
