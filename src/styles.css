@@ -32,3 +32,5 @@ form{display:grid;gap:13px}form>label{display:grid;gap:7px;font-size:11px;font-w
 .mine .message-bubble small .read-receipt{color:#60a5fa}
 
 .unread-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--purple);color:white;font-size:9px;font-weight:800;flex-shrink:0}
+
+.admin-search{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}.admin-search input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--surface);color:var(--text);font:11px 'DM Sans',sans-serif}
