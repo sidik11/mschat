@@ -1,4 +1,4 @@
-import { json, method, requireOrigin, session, rootRef, safeError } from '../_lib/core.js';
+import { json, method, requireOrigin, session, rootRef, safeError } from '../../lib/core.js';
 const validJwk = key => key && key.kty === 'EC' && key.crv === 'P-256' && typeof key.x === 'string' && typeof key.y === 'string' && key.x.length <= 100 && key.y.length <= 100;
 
 export default async function handler(req, res) {
