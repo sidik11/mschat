@@ -1,33 +1,49 @@
-# Deployment setup (foundation)
-
-## Local prerequisites
-
-- Node.js 22 or newer and npm.
-- A Firebase project with Realtime Database.
-- Gmail API OAuth client and refresh token for sending verification email.
-- Cloudflare R2 private bucket for future attachment support.
-- Vercel project connected to this repository.
+# Deployment Guide
 
 ## Local setup
-
-1. Clone the repository and run `npm install`.
-2. Copy `.env.example` to `.env` and replace placeholders locally. Never commit `.env`.
-3. Set Firebase Admin service-account values in server-only environment variables.
-4. Configure Gmail API OAuth credentials if testing registration email delivery.
-5. Run `npm run dev`; run `npm run build` to verify the frontend build.
-6. Use `npm test` for the Node test suite (additional tests are still required).
+1. Use Node.js 22.x.
+2. Run `npm install`.
+3. Copy `.env.example` to `.env`; use placeholders only in source control.
+4. Set `ALLOWED_ORIGINS=http://localhost:5173` locally and exact HTTPS origins in Vercel.
+5. Set `OTP_HMAC_SECRET` to at least 32 cryptographically random bytes. Keep it stable across deployments so outstanding OTP digests remain valid.
+6. Run `npm test`, then `npm run build`.
 
 ## Firebase
+1. Create a dedicated Firebase project and Realtime Database.
+2. Apply `firebase.rules.json`; confirm unauthenticated client reads/writes are denied.
+3. Create a dedicated service account with least privilege.
+4. Add database URL, project ID, service-account email and private key to Vercel server-side variables.
+5. Keep all application paths under `mschat/`. Do not put service-account keys in RTDB.
 
-1. Create a dedicated RTDB for MS Chat or use a database whose data is safely isolated.
-2. Deploy `firebase.rules.json` as restrictive rules; Admin SDK server operations bypass these rules, so API authorization is mandatory.
-3. Keep all app records under `mschat/`; never run a destructive reset in a shared database.
-4. Do not enable account creation until atomic email/username reservations and concurrency tests are complete.
+## Gmail API
+1. Enable Gmail API and configure OAuth consent.
+2. Generate a refresh token with `gmail.send` scope.
+3. Configure `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` and `GMAIL_SENDER_EMAIL`.
+4. Test registration and admin OTP delivery using a real mailbox. CI does not prove delivery.
 
-## Vercel environment
+## Cloudflare R2
+1. Create a dedicated private bucket for MS Chat.
+2. Add account ID, access key, secret and bucket name to server-side variables.
+3. Configure bucket CORS for exact app origins and required PUT/GET/HEAD methods and Content-Type header.
+4. Keep keys under `mschat/attachments/` and `mschat/profile-images/`; do not configure a public bucket.
+5. Test upload, complete, download, profile image replacement, deletion and cleanup against real R2. Attachment upload is not resumable.
 
-Add server-only variables from `.env.example` to Vercel's Project Settings for Development, Preview, and Production as appropriate. Do not use `VITE_` prefixes for secrets. Deploy only after configuring the variables required by the enabled routes.
+## Web Push
+Generate VAPID keys with `npx web-push generate-vapid-keys`. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and a valid `VAPID_SUBJECT`. Test on target browsers; support varies by platform.
 
-## Release status
+## Admin bootstrap
+1. Register and verify the intended administrator account.
+2. Set `ADMIN_EMAIL` and a long random `ADMIN_BOOTSTRAP_SECRET`.
+3. Sign in and visit `/admin.html`; enter the bootstrap secret once.
+4. Remove or rotate the bootstrap secret in every Vercel environment immediately after success.
+5. Administrator login requires password plus email OTP. Protect the mailbox and OAuth credentials.
 
-The current code is a foundation build and is not a production messaging application. E2EE, secure session lifecycle, message APIs, R2 upload/download, push, admin security, and full test coverage are outstanding. Do not enable production user registration or represent the service as secure messaging until these are implemented and verified.
+## Vercel
+1. Import the repository and select the intended branch.
+2. Configure Preview and Production environment variables separately.
+3. Confirm Node.js 22.x runtime, HTTPS, exact origins, and cron authentication.
+4. Configure `CRON_SECRET` and ensure scheduled cleanup invokes the cleanup route with `Authorization: Bearer <CRON_SECRET>`.
+5. Deploy only after CI passes, then verify `/api/health`, registration, login persistence, logout, friend requests, messaging, R2, push and cleanup with real services.
+
+## Operational notes
+Historical counters are not initialized automatically; dashboard metrics are tracked only since their recorded start time. Account deletion currently queues a pending request but does not finish all data cleanup. Do not run destructive migrations without backup and rollback plans.
