@@ -17,6 +17,7 @@ export default function Chat({ user, onLogout }) {
   const [outgoing, setOutgoing] = useState([]);
   const [active, setActive] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [unreadMessageIds, setUnreadMessageIds] = useState([]);
   const [olderMessageCursor, setOlderMessageCursor] = useState(null);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [conversationCursor, setConversationCursor] = useState(null);
@@ -131,7 +132,7 @@ export default function Chat({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
-    if (!activeFriend) { setMessages([]); setRemoteKey(null); setRemoteFingerprint(''); setIsFriendTyping(false); return; }
+    if (!activeFriend) { setMessages([]); setUnreadMessageIds([]); setRemoteKey(null); setRemoteFingerprint(''); setIsFriendTyping(false); return; }
     let cancelled = false;
     setRemoteKey(null); setRemoteFingerprint('');
     (async () => {
@@ -155,7 +156,7 @@ export default function Chat({ user, onLogout }) {
             return { ...m, text: clear };
           } catch { return { ...m, text: 'Unable to decrypt on this device' }; }
         }));
-        if (!cancelled) { setMessages(decoded); setOlderMessageCursor(data.nextCursor || null); }
+        if (!cancelled) { setMessages(decoded); setUnreadMessageIds(data.unreadMessageIds || []); setOlderMessageCursor(data.nextCursor || null); }
       } catch (e) { if (!cancelled) { setMessages([]); setError(e.message); } }
     })();
     return () => { cancelled = true; };
@@ -176,6 +177,7 @@ export default function Chat({ user, onLogout }) {
           } catch { return { ...m, text: 'Unable to decrypt on this device' }; }
         }));
         if (cancelled) return;
+        setUnreadMessageIds(data.unreadMessageIds || []);
         setMessages(current => { const latestIds = new Set(decoded.map(m => m.id)); return [...current.filter(m => !latestIds.has(m.id)), ...decoded]; });
         const typingState = await api('/api/typing?conversationId=' + encodeURIComponent(activeFriend.conversationId));
         if (!cancelled) setIsFriendTyping(Boolean(typingState.typing));
@@ -187,6 +189,7 @@ export default function Chat({ user, onLogout }) {
             await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'read', shareReceipt: privacySettings.readReceiptsEnabled });
           } catch {}
         }
+        if (unread.length) setUnreadMessageIds(current => current.filter(id => !unreadIds.has(id)));
       } catch {}
     };
     poll();
@@ -355,6 +358,7 @@ export default function Chat({ user, onLogout }) {
       for (const m of decoded.filter(m => m.senderId !== user.id && unreadIds.has(m.id) && !m.deletedForEveryone)) {
         try { if (!m.deliveredTo?.[user.id]) await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'delivered' }); await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'read', shareReceipt: privacySettings.readReceiptsEnabled }); } catch {}
       }
+      setUnreadMessageIds(current => current.filter(id => !(data.unreadMessageIds || []).includes(id)));
       setOlderMessageCursor(data.nextCursor || null);
     } catch (e) { setError(e.message); } finally { setLoadingOlderMessages(false); }
   }
@@ -425,7 +429,7 @@ export default function Chat({ user, onLogout }) {
       <section className="conversation-panel">
         {!activeFriend ? <div className="chat-empty"><span className="empty-logo"><MessageCircle size={32}/></span><h2>Your conversations, your space.</h2><p>Choose a contact or add a friend to begin an encrypted chat.</p><div><ShieldCheck size={16}/> Message content is encrypted in your browser before sending.</div></div> :
           <><div className="conversation-head"><span className="contact-avatar">{activeFriend.avatarUrl ? <img className="avatar-image" src={activeFriend.avatarUrl} alt=""/> : activeFriend.fullName.slice(0,1).toUpperCase()}</span><div><strong>{activeFriend.fullName}</strong><small>@{activeFriend.username} · {activeFriend.online?'Online':'Offline'} · <ShieldCheck size={12}/> Client-side encrypted</small>{remoteFingerprint&&<small className="key-fingerprint">Key fingerprint · verify out of band: {remoteFingerprint.split(' ').slice(0,6).join(' ')}</small>}</div><button className="chat-icon-btn" onClick={removeActiveFriend} aria-label="Remove friend" title="Remove contact"><Users size={16}/></button><button className="chat-icon-btn" onClick={toggleMuteActiveConversation} aria-label={privacySettings.mutedConversations?.[activeFriend.conversationId]?'Unmute conversation':'Mute conversation'} title={privacySettings.mutedConversations?.[activeFriend.conversationId]?'Unmute notifications':'Mute notifications'}><Bell size={16} style={{opacity: privacySettings.mutedConversations?.[activeFriend.conversationId] ? 0.5 : 1}}/></button><button className="chat-icon-btn" onClick={reportActiveFriend} aria-label="Report user" title="Report user"><ShieldCheck size={16}/></button><button className="chat-icon-btn" onClick={blockActiveFriend} aria-label="Block user" title="Block user"><UserRoundX size={16}/></button></div>
-          {!isOnline&&<div className="network-banner" role="status">You are offline. Your draft stays here; sending will resume when you reconnect.</div>}<div className="message-list">{olderMessageCursor&&<button className="refresh-btn" disabled={loadingOlderMessages} onClick={loadOlderMessages}>{loadingOlderMessages?'Loading…':'Load older messages'}</button>}{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.deletedForEveryone ? <em>This message was deleted.</em> : m.attachment ? <div className="attachment-row"><button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button>{['image','video'].includes(m.attachment.mediaType)&&<button className="attachment-preview" onClick={()=>viewAttachment(m.attachment)} disabled={previewLoading}>{previewLoading?'Loading…':'View'}</button>}</div> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&(Object.keys(m.readBy||{}).length?<CheckCheck className="read-receipt" size={13}/>:Object.keys(m.deliveredTo||{}).length?<CheckCheck size={13}/>:<Check size={13}/>)}</small><div className="message-actions"><button type="button" onClick={()=>deleteMessageAction(m,'me')} title="Hide this message for you"><Trash2 size={12}/> Delete for me</button>{m.senderId===user.id&&!m.deletedForEveryone&&Date.now()-m.createdAt<15*60*1000&&<button type="button" onClick={()=>deleteMessageAction(m,'everyone')} title="Delete this message for everyone">Delete for everyone</button>}</div></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}{isFriendTyping&&<div className="typing-indicator">{activeFriend.fullName} is typing…</div>}</div>
+          {!isOnline&&<div className="network-banner" role="status">You are offline. Your draft stays here; sending will resume when you reconnect.</div>}<div className="message-list">{olderMessageCursor&&<button className="refresh-btn" disabled={loadingOlderMessages} onClick={loadOlderMessages}>{loadingOlderMessages?'Loading…':'Load older messages'}</button>}{messages.map(m=><React.Fragment key={m.id}>{unreadMessageIds.includes(m.id)&&<div className="unread-separator">Unread messages</div>}<div className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.deletedForEveryone ? <em>This message was deleted.</em> : m.attachment ? <div className="attachment-row"><button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button>{['image','video'].includes(m.attachment.mediaType)&&<button className="attachment-preview" onClick={()=>viewAttachment(m.attachment)} disabled={previewLoading}>{previewLoading?'Loading…':'View'}</button>}</div> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&(Object.keys(m.readBy||{}).length?<CheckCheck className="read-receipt" size={13}/>:Object.keys(m.deliveredTo||{}).length?<CheckCheck size={13}/>:<Check size={13}/>)}</small><div className="message-actions"><button type="button" onClick={()=>deleteMessageAction(m,'me')} title="Hide this message for you"><Trash2 size={12}/> Delete for me</button>{m.senderId===user.id&&!m.deletedForEveryone&&Date.now()-m.createdAt<15*60*1000&&<button type="button" onClick={()=>deleteMessageAction(m,'everyone')} title="Delete this message for everyone">Delete for everyone</button>}</div></div></div></React.Fragment>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}{isFriendTyping&&<div className="typing-indicator">{activeFriend.fullName} is typing…</div>}</div>
           <form className="message-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Write a message…" maxLength={4000} disabled={!remoteKey}/><input ref={fileInput} type="file" accept="image/*,video/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" className="hidden-file-input" onChange={e=>sendFile(e.target.files?.[0])} aria-label="Attach a file"/><button type="button" className="attach-button" disabled={busy||!remoteKey} onClick={()=>fileInput.current?.click()} aria-label="Attach encrypted file"><Paperclip size={17}/></button><button disabled={busy||!remoteKey||!draft.trim()||!isOnline} aria-label="Send message"><Send size={18}/></button></form>{transferProgress&&<div className="file-transfer"><div><strong>{transferProgress.name}</strong><span>{transferProgress.phase} · {transferProgress.progress}%</span></div><div className="transfer-track"><span style={{width:transferProgress.progress+'%'}}/></div></div>}</>}
         {error&&<div className="chat-notice" role="status">{error}<button onClick={()=>setError('')}>×</button></div>}
         {pushState&&<div className="chat-notice" role="status">{pushState}<button onClick={()=>setPushState('')}>×</button></div>}
