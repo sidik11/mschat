@@ -30,6 +30,7 @@ import account from '../lib/handlers/account.js';
 import deleteMessage from '../lib/handlers/messages/delete.js';
 import conversations from '../lib/handlers/conversations.js';
 import security from '../lib/handlers/security.js';
+import profileImage from '../lib/handlers/profile-image.js';
 
 const routes = new Map([
   ['auth/request-otp', requestOtp],
@@ -62,7 +63,8 @@ const routes = new Map([
   ['account', account],
   ['messages/delete', deleteMessage],
   ['conversations', conversations],
-  ['security', security]
+  ['security', security],
+  ['profile-image', profileImage]
 ]);
 
 function routeName(req) {
