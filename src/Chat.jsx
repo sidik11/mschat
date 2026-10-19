@@ -155,7 +155,7 @@ export default function Chat({ user, onLogout }) {
             return { ...m, text: clear };
           } catch { return { ...m, text: 'Unable to decrypt on this device' }; }
         }));
-        if (!cancelled) { setMessages(decoded); setOlderMessageCursor((data.messages || []).length === 100 ? data.nextCursor : null); }
+        if (!cancelled) { setMessages(decoded); setOlderMessageCursor(data.nextCursor || null); }
       } catch (e) { if (!cancelled) { setMessages([]); setError(e.message); } }
     })();
     return () => { cancelled = true; };
@@ -351,7 +351,11 @@ export default function Chat({ user, onLogout }) {
         catch { return { ...m, text: 'Unable to decrypt on this device' }; }
       }));
       setMessages(current => { const existing = new Set(current.map(m => m.id)); return [...decoded.filter(m => !existing.has(m.id)), ...current]; });
-      setOlderMessageCursor(decoded.length === 100 ? data.nextCursor : null);
+      const unreadIds = new Set(data.unreadMessageIds || []);
+      for (const m of decoded.filter(m => m.senderId !== user.id && unreadIds.has(m.id) && !m.deletedForEveryone)) {
+        try { if (!m.deliveredTo?.[user.id]) await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'delivered' }); await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'read', shareReceipt: privacySettings.readReceiptsEnabled }); } catch {}
+      }
+      setOlderMessageCursor(data.nextCursor || null);
     } catch (e) { setError(e.message); } finally { setLoadingOlderMessages(false); }
   }
   async function deleteMessageAction(message, scope) {
