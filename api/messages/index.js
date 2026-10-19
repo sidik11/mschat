@@ -1,11 +1,12 @@
 import webpush from 'web-push';
-import { json, method, requireOrigin, session, rootRef, safeError } from '../../lib/core.js';
+import { json, method, requireOrigin, session, rootRef, safeError, consumeRateLimit, rateLimitKey } from '../../lib/core.js';
 const validId = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{3,160}$/.test(value);
 export default async function handler(req, res) {
   if (!method(req, res, ['GET', 'POST']) || (req.method === 'POST' && !requireOrigin(req, res))) return;
   try {
     const auth = await session(req); if (!auth) return json(res, 401, { error: 'UNAUTHENTICATED' });
     const root = rootRef();
+    if (req.method === 'POST' && !(await consumeRateLimit(rateLimitKey(req, 'message:' + auth.uid), 120, 60 * 1000))) return json(res, 429, { error: 'RATE_LIMITED' });
     if (req.method === 'GET') {
       const conversationId = String(req.query?.conversationId || '');
       if (!validId(conversationId)) return json(res, 400, { error: 'INVALID_CONVERSATION' });
