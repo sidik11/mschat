@@ -1,7 +1,7 @@
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { json, method, rootRef, safeError } from '../_lib/core.js';
-import { r2Client } from '../attachments/_r2.js';
+import { json, method, rootRef, safeError } from '../../lib/core.js';
+import { r2Client } from '../../lib/r2.js';
 function matches(a, b) {
   if (!a || !b) return false;
   return timingSafeEqual(createHash('sha256').update(String(a)).digest(), createHash('sha256').update(String(b)).digest());
