@@ -1,5 +1,5 @@
 import webpush from 'web-push';
-import { json, method, requireOrigin, session, rootRef, safeError } from '../_lib/core.js';
+import { json, method, requireOrigin, session, rootRef, safeError } from '../../lib/core.js';
 const validId = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{3,160}$/.test(value);
 export default async function handler(req, res) {
   if (!method(req, res, ['GET', 'POST']) || (req.method === 'POST' && !requireOrigin(req, res))) return;
