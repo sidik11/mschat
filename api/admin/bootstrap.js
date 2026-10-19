@@ -1,5 +1,5 @@
 import { timingSafeEqual, createHash } from 'node:crypto';
-import { json, method, requireOrigin, session, rootRef, safeError } from '../_lib/core.js';
+import { json, method, requireOrigin, session, rootRef, safeError } from '../../lib/core.js';
 function matches(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
   const x = createHash('sha256').update(a).digest(), y = createHash('sha256').update(b).digest();
