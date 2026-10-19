@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LogOut, Plus, Send, MessageCircle, ShieldCheck, Users, CheckCheck, Check, Bell, RefreshCw, Search, Paperclip, Download, FileText, Settings, Trash2, UserRoundX } from 'lucide-react';
-import { getOrCreateDeviceKey, getConversationAesKey, encryptText, decryptText, encryptBytes, decryptBytes } from './chat-crypto.js';
+import { getOrCreateDeviceKey, getConversationAesKey, encryptText, decryptText, encryptBytes, decryptBytes, checkRemoteKey, trustRemoteKey } from './chat-crypto.js';
 
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: 'include', ...options, headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) } });
@@ -23,6 +23,7 @@ export default function Chat({ user, onLogout }) {
   const [privateKey, setPrivateKey] = useState(null);
   const [myPublicKey, setMyPublicKey] = useState(null);
   const [remoteKey, setRemoteKey] = useState(null);
+  const [remoteFingerprint, setRemoteFingerprint] = useState('');
   const [search, setSearch] = useState('');
   const [isFriendTyping, setIsFriendTyping] = useState(false);
   const [transferProgress, setTransferProgress] = useState(null);
@@ -91,13 +92,20 @@ export default function Chat({ user, onLogout }) {
   useEffect(() => {
     if (!activeFriend) { setMessages([]); setRemoteKey(null); setIsFriendTyping(false); return; }
     let cancelled = false;
+    setRemoteKey(null); setRemoteFingerprint('');
     (async () => {
       try {
         const keyData = await api('/api/keys?username=' + encodeURIComponent(activeFriend.username));
         if (!keyData.publicKey) throw new Error('This contact has not set up an encryption key on this device yet.');
+        const trust = await checkRemoteKey(activeFriend.username, keyData.publicKey);
+        if (trust.changed) {
+          const accepted = window.confirm('SECURITY WARNING: ' + activeFriend.fullName + ' has a different encryption key than the one pinned on this device. This can happen after reinstalling or could indicate impersonation. Verify the new fingerprint with them through another channel before continuing.\n\nPrevious: ' + trust.previous + '\nNew: ' + trust.fingerprint + '\n\nAccept this key change?');
+          if (!accepted) throw new Error('Encryption key changed. Messaging is paused until you verify and accept the new key.');
+          await trustRemoteKey(activeFriend.username, keyData.publicKey);
+        }
         const key = await getConversationAesKey(privateKey, keyData.publicKey);
         if (cancelled) return;
-        setRemoteKey(key);
+        setRemoteKey(key); setRemoteFingerprint(trust.fingerprint);
         const data = await api('/api/messages?conversationId=' + encodeURIComponent(activeFriend.conversationId));
         const decoded = await Promise.all((data.messages || []).map(async m => {
           try {
@@ -342,7 +350,7 @@ export default function Chat({ user, onLogout }) {
       </aside>
       <section className="conversation-panel">
         {!activeFriend ? <div className="chat-empty"><span className="empty-logo"><MessageCircle size={32}/></span><h2>Your conversations, your space.</h2><p>Choose a contact or add a friend to begin an encrypted chat.</p><div><ShieldCheck size={16}/> Message content is encrypted in your browser before sending.</div></div> :
-          <><div className="conversation-head"><span className="contact-avatar">{activeFriend.avatarUrl ? <img className="avatar-image" src={activeFriend.avatarUrl} alt=""/> : activeFriend.fullName.slice(0,1).toUpperCase()}</span><div><strong>{activeFriend.fullName}</strong><small>@{activeFriend.username} · {activeFriend.online?'Online':'Offline'} · <ShieldCheck size={12}/> Encrypted messages</small></div><button className="chat-icon-btn" onClick={removeActiveFriend} aria-label="Remove friend" title="Remove contact"><Users size={16}/></button><button className="chat-icon-btn" onClick={toggleMuteActiveConversation} aria-label={privacySettings.mutedConversations?.[activeFriend.conversationId]?'Unmute conversation':'Mute conversation'} title={privacySettings.mutedConversations?.[activeFriend.conversationId]?'Unmute notifications':'Mute notifications'}><Bell size={16} style={{opacity: privacySettings.mutedConversations?.[activeFriend.conversationId] ? 0.5 : 1}}/></button><button className="chat-icon-btn" onClick={reportActiveFriend} aria-label="Report user" title="Report user"><ShieldCheck size={16}/></button><button className="chat-icon-btn" onClick={blockActiveFriend} aria-label="Block user" title="Block user"><UserRoundX size={16}/></button></div>
+          <><div className="conversation-head"><span className="contact-avatar">{activeFriend.avatarUrl ? <img className="avatar-image" src={activeFriend.avatarUrl} alt=""/> : activeFriend.fullName.slice(0,1).toUpperCase()}</span><div><strong>{activeFriend.fullName}</strong><small>@{activeFriend.username} · {activeFriend.online?'Online':'Offline'} · <ShieldCheck size={12}/> Client-side encrypted</small>{remoteFingerprint&&<small className="key-fingerprint">Key fingerprint · verify out of band: {remoteFingerprint.split(' ').slice(0,6).join(' ')}</small>}</div><button className="chat-icon-btn" onClick={removeActiveFriend} aria-label="Remove friend" title="Remove contact"><Users size={16}/></button><button className="chat-icon-btn" onClick={toggleMuteActiveConversation} aria-label={privacySettings.mutedConversations?.[activeFriend.conversationId]?'Unmute conversation':'Mute conversation'} title={privacySettings.mutedConversations?.[activeFriend.conversationId]?'Unmute notifications':'Mute notifications'}><Bell size={16} style={{opacity: privacySettings.mutedConversations?.[activeFriend.conversationId] ? 0.5 : 1}}/></button><button className="chat-icon-btn" onClick={reportActiveFriend} aria-label="Report user" title="Report user"><ShieldCheck size={16}/></button><button className="chat-icon-btn" onClick={blockActiveFriend} aria-label="Block user" title="Block user"><UserRoundX size={16}/></button></div>
           <div className="message-list">{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.deletedForEveryone ? <em>This message was deleted.</em> : m.attachment ? <button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&(Object.keys(m.readBy||{}).length?<CheckCheck className="read-receipt" size={13}/>:Object.keys(m.deliveredTo||{}).length?<CheckCheck size={13}/>:<Check size={13}/>)}</small><div className="message-actions"><button type="button" onClick={()=>deleteMessageAction(m,'me')} title="Hide this message for you"><Trash2 size={12}/> Delete for me</button>{m.senderId===user.id&&!m.deletedForEveryone&&Date.now()-m.createdAt<15*60*1000&&<button type="button" onClick={()=>deleteMessageAction(m,'everyone')} title="Delete this message for everyone">Delete for everyone</button>}</div></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}{isFriendTyping&&<div className="typing-indicator">{activeFriend.fullName} is typing…</div>}</div>
           <form className="message-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Write a message…" maxLength={4000} disabled={!remoteKey}/><input ref={fileInput} type="file" accept="image/*,video/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" className="hidden-file-input" onChange={e=>sendFile(e.target.files?.[0])} aria-label="Attach a file"/><button type="button" className="attach-button" disabled={busy||!remoteKey} onClick={()=>fileInput.current?.click()} aria-label="Attach encrypted file"><Paperclip size={17}/></button><button disabled={busy||!remoteKey||!draft.trim()} aria-label="Send message"><Send size={18}/></button></form>{transferProgress&&<div className="file-transfer"><div><strong>{transferProgress.name}</strong><span>{transferProgress.phase} · {transferProgress.progress}%</span></div><div className="transfer-track"><span style={{width:transferProgress.progress+'%'}}/></div></div>}</>}
         {error&&<div className="chat-notice" role="status">{error}<button onClick={()=>setError('')}>×</button></div>}
