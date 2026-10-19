@@ -36,6 +36,7 @@ export default function Chat({ user, onLogout }) {
   const [attachmentPreview, setAttachmentPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [presenceTabId] = useState(() => { try { let id = sessionStorage.getItem('mschat_tab_id'); if (!id) { id = crypto.randomUUID().replace(/-/g, ''); sessionStorage.setItem('mschat_tab_id', id); } return id; } catch { return crypto.randomUUID().replace(/-/g, ''); } });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [complaintSubject, setComplaintSubject] = useState('');
   const [complaintDescription, setComplaintDescription] = useState('');
@@ -113,12 +114,12 @@ export default function Chat({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
-    const heartbeat = () => { if (document.visibilityState === 'visible') post('/api/presence', { conversationId: activeFriend?.conversationId || '' }).catch(() => {}); };
+    const heartbeat = () => { if (document.visibilityState === 'visible') post('/api/presence', { conversationId: activeFriend?.conversationId || '', tabId: presenceTabId }).catch(() => {}); };
     heartbeat();
     const timer = setInterval(heartbeat, 45000);
     document.addEventListener('visibilitychange', heartbeat);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', heartbeat); };
-  }, [activeFriend?.conversationId]);
+  }, [activeFriend?.conversationId, presenceTabId]);
 
   useEffect(() => () => { if (userSearchTimer.current) clearTimeout(userSearchTimer.current); }, []);
 
