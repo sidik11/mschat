@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LogOut, Plus, Send, MessageCircle, ShieldCheck, Users, CheckCheck, Check, Bell, RefreshCw, Search, Paperclip, Download, FileText, Settings, Trash2, UserRoundX } from 'lucide-react';
-import { getOrCreateDeviceKey, getConversationAesKey, encryptText, decryptText, encryptBytes, decryptBytes, checkRemoteKey, trustRemoteKey } from './chat-crypto.js';
+import { getOrCreateDeviceKey, getConversationAesKey, encryptText, decryptText, encryptBytes, decryptBytes, checkRemoteKey, trustRemoteKey, encryptAttachmentBytes, decryptAttachmentBytes } from './chat-crypto.js';
 
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: 'include', ...options, headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) } });
@@ -166,12 +166,12 @@ export default function Chat({ user, onLogout }) {
     try {
       const uploadFingerprint = [file.name, file.size, file.lastModified].join(':');
       if (!pendingUploadIdempotency.current.has(uploadFingerprint)) pendingUploadIdempotency.current.set(uploadFingerprint, crypto.randomUUID());
-      const encrypted = await encryptBytes(remoteKey, await file.arrayBuffer());
+      const encrypted = await encryptAttachmentBytes(await file.arrayBuffer());
       setTransferProgress({ name: file.name, progress: 5, phase: 'Preparing private upload' });
       const upload = await post('/api/attachments/upload-url', { conversationId: activeFriend.conversationId, fileName: file.name, size: file.size, mimeType, mediaType });
       await uploadWithProgress(upload.uploadUrl, encrypted.buffer, progress => setTransferProgress({ name: file.name, progress, phase: 'Uploading encrypted file' }));
       const complete = await post('/api/attachments/complete', { attachmentId: upload.attachmentId });
-      const payload = { type: 'attachment', attachmentId: complete.attachment.id, fileName: file.name, mimeType, mediaType, size: file.size, fileIv: encrypted.iv };
+      const payload = { type: 'attachment', attachmentId: complete.attachment.id, fileName: file.name, mimeType, mediaType, size: file.size, fileKey: encrypted.fileKey, fileIv: encrypted.iv };
       const encryptedMessage = await encryptText(remoteKey, JSON.stringify(payload));
       const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encryptedMessage, keyVersion: 1, attachmentId: payload.attachmentId, idempotencyKey: pendingUploadIdempotency.current.get(uploadFingerprint) });
       pendingUploadIdempotency.current.delete(uploadFingerprint);
@@ -189,7 +189,7 @@ export default function Chat({ user, onLogout }) {
       const response = await fetch(info.downloadUrl);
       if (!response.ok) throw new Error('Could not download the encrypted file.');
       const encrypted = await response.arrayBuffer();
-      const clear = await decryptBytes(remoteKey, encrypted, attachment.fileIv);
+      const clear = await decryptAttachmentBytes(attachment.fileKey, encrypted, attachment.fileIv);
       const blob = new Blob([clear], { type: attachment.mimeType || 'application/octet-stream' });
       const url = URL.createObjectURL(blob), a = document.createElement('a');
       a.href = url; a.download = attachment.fileName || 'attachment'; a.click();
