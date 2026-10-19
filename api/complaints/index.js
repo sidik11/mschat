@@ -1,10 +1,11 @@
-import { json, method, requireOrigin, session, rootRef, safeError } from '../../lib/core.js';
+import { json, method, requireOrigin, session, rootRef, safeError, consumeRateLimit, rateLimitKey } from '../../lib/core.js';
 export default async function handler(req, res) {
   if (!method(req, res, ['GET', 'POST']) || (req.method === 'POST' && !requireOrigin(req, res))) return;
   try {
     const auth = await session(req); if (!auth) return json(res, 401, { error: 'UNAUTHENTICATED' });
     const root = rootRef();
     if (req.method === 'POST') {
+      if (!(await consumeRateLimit(rateLimitKey(req, 'complaint:' + auth.uid), 5, 60 * 60 * 1000))) return json(res, 429, { error: 'RATE_LIMITED' });
       const subject = String(req.body?.subject || '').trim();
       const description = String(req.body?.description || '').trim();
       if (subject.length < 4 || subject.length > 120 || description.length < 10 || description.length > 3000) return json(res, 400, { error: 'INVALID_COMPLAINT' });
