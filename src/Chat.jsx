@@ -355,10 +355,11 @@ export default function Chat({ user, onLogout }) {
       }));
       setMessages(current => { const existing = new Set(current.map(m => m.id)); return [...decoded.filter(m => !existing.has(m.id)), ...current]; });
       const unreadIds = new Set(data.unreadMessageIds || []);
-      for (const m of decoded.filter(m => m.senderId !== user.id && unreadIds.has(m.id) && !m.deletedForEveryone)) {
+      const readIds = new Set(decoded.filter(m => m.senderId !== user.id && unreadIds.has(m.id) && !m.deletedForEveryone).map(m => m.id));
+      for (const m of decoded.filter(m => readIds.has(m.id))) {
         try { if (!m.deliveredTo?.[user.id]) await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'delivered' }); await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'read', shareReceipt: privacySettings.readReceiptsEnabled }); } catch {}
       }
-      setUnreadMessageIds(current => current.filter(id => !(data.unreadMessageIds || []).includes(id)));
+      setUnreadMessageIds(current => current.filter(id => !readIds.has(id)));
       setOlderMessageCursor(data.nextCursor || null);
     } catch (e) { setError(e.message); } finally { setLoadingOlderMessages(false); }
   }
