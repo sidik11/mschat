@@ -1,4 +1,4 @@
-import { json, method, session, safeError } from '../_lib/core.js';
+import { json, method, session, safeError } from '../../lib/core.js';
 export default async function handler(req, res) {
   if (!method(req, res, ['GET'])) return;
   try {
