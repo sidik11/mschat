@@ -30,20 +30,27 @@ async function setValue(key, value) {
 const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
 const fromB64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
 
-export async function getOrCreateDeviceKey(userId) {
-  if (typeof userId !== 'string' || !/^[A-Za-z0-9_-]{8,160}$/.test(userId)) throw new Error('Invalid account key namespace');
-  const privateKeyName = 'ecdh-private:' + userId;
-  const publicKeyName = 'ecdh-public-jwk:' + userId;
-  let privateKey = await getValue(privateKeyName);
-  let publicJwk = await getValue(publicKeyName);
-  if (privateKey && publicJwk) return { privateKey, publicJwk };
-  const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
-  publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
-  const privateJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
-  privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
-  await setValue(privateKeyName, privateKey);
-  await setValue(publicKeyName, publicJwk);
-  return { privateKey, publicJwk };
+const keyPromises = new Map();
+export function getOrCreateDeviceKey(userId) {
+  if (typeof userId !== 'string' || !/^[A-Za-z0-9_-]{8,160}$/.test(userId)) return Promise.reject(new Error('Invalid account key namespace'));
+  if (keyPromises.has(userId)) return keyPromises.get(userId);
+  const pending = (async () => {
+    const privateKeyName = 'ecdh-private:' + userId;
+    const publicKeyName = 'ecdh-public-jwk:' + userId;
+    let privateKey = await getValue(privateKeyName);
+    let publicJwk = await getValue(publicKeyName);
+    if (privateKey && publicJwk) return { privateKey, publicJwk };
+    const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
+    const privateJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
+    privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+    await setValue(privateKeyName, privateKey);
+    await setValue(publicKeyName, publicJwk);
+    return { privateKey, publicJwk };
+  })();
+  keyPromises.set(userId, pending);
+  pending.finally(() => keyPromises.delete(userId)).catch(() => {});
+  return pending;
 }
 export async function getConversationAesKey(privateKey, remotePublicJwk) {
   const remotePublic = await crypto.subtle.importKey('jwk', remotePublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
