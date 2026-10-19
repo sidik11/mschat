@@ -125,11 +125,11 @@ export default function Chat({ user, onLogout }) {
       try {
         const keyData = await api('/api/keys?username=' + encodeURIComponent(activeFriend.username));
         if (!keyData.publicKey) throw new Error('This contact has not set up an encryption key on this device yet.');
-        const trust = await checkRemoteKey(activeFriend.username, keyData.publicKey);
+        const trust = await checkRemoteKey(activeFriend.id, keyData.publicKey);
         if (trust.changed) {
           const accepted = window.confirm('SECURITY WARNING: ' + activeFriend.fullName + ' has a different encryption key than the one pinned on this device. This can happen after reinstalling or could indicate impersonation. Verify the new fingerprint with them through another channel before continuing.\n\nPrevious: ' + trust.previous + '\nNew: ' + trust.fingerprint + '\n\nAccept this key change?');
           if (!accepted) throw new Error('Encryption key changed. Messaging is paused until you verify and accept the new key.');
-          await trustRemoteKey(activeFriend.username, keyData.publicKey);
+          await trustRemoteKey(activeFriend.id, keyData.publicKey);
         }
         const key = await getConversationAesKey(privateKey, keyData.publicKey);
         if (cancelled) return;
