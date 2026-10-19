@@ -14,6 +14,7 @@ function uploadWithProgress(url, buffer, onProgress, contentType = 'application/
 export default function Chat({ user, onLogout }) {
   const [friends, setFriends] = useState([]);
   const [incoming, setIncoming] = useState([]);
+  const [outgoing, setOutgoing] = useState([]);
   const [active, setActive] = useState(null);
   const [messages, setMessages] = useState([]);
   const [olderMessageCursor, setOlderMessageCursor] = useState(null);
@@ -70,7 +71,7 @@ export default function Chat({ user, onLogout }) {
       const preserved = current.filter(f => allowed.has(f.id) && !pageIds.has(f.id));
       return [...page, ...preserved];
     });
-    setIncoming(data.incoming || []);
+    setIncoming(data.incoming || []); setOutgoing(data.outgoing || []);
     setConversationCursor(current => current ?? conversationData.nextCursor ?? null);
   }
   async function loadOlderConversations() {
@@ -387,7 +388,7 @@ export default function Chat({ user, onLogout }) {
       <aside className="contacts-panel">
         <div className="panel-heading"><div><h2>Messages</h2><p>Private one-to-one chats</p></div><span className="online-pill"><span/> Protected</span></div>
         <form className="friend-add" onSubmit={addFriend}><input value={username} onChange={e=>setUsername(e.target.value)} placeholder="Add by username" maxLength={24} required/><button disabled={busy} aria-label="Send friend request"><Plus size={18}/></button></form><div className="directory-search"><input value={userSearch} onChange={e=>searchUsers(e.target.value)} placeholder="Find people by username" aria-label="Search users"/>{searchResults.map(result=><button key={result.id} type="button" onClick={()=>setUsername(result.username)}><span><strong>{result.fullName}</strong><small>@{result.username}</small></span><Plus size={15}/></button>)}</div>
-        {incoming.length > 0 && <section className="incoming-list"><h3>Friend requests</h3>{incoming.map(r=><div className="incoming-item" key={r.requestId}><span>@{r.user.username}</span><button onClick={()=>respond(r.requestId,'accept')}>Accept</button><button className="muted-btn" onClick={()=>respond(r.requestId,'reject')}>Ignore</button></div>)}</section>}
+        {incoming.length > 0 && <section className="incoming-list"><h3>Friend requests</h3>{incoming.map(r=><div className="incoming-item" key={r.requestId}><span>@{r.user.username}</span><button onClick={()=>respond(r.requestId,'accept')}>Accept</button><button className="muted-btn" onClick={()=>respond(r.requestId,'reject')}>Ignore</button></div>)}</section>}{outgoing.length > 0 && <section className="incoming-list"><h3>Sent requests</h3>{outgoing.map(r=><div className="incoming-item" key={r.requestId}><span>@{r.user.username}</span><button className="muted-btn" onClick={()=>respond(r.requestId,'cancel')}>Cancel</button></div>)}</section>}
         <div className="contact-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search contacts"/></div>
         <div className="contact-list">{visibleFriends.map(f=><button key={f.id} className={'contact-item '+(active===f.id?'selected':'')} onClick={()=>setActive(f.id)}><span className="contact-avatar">{f.avatarUrl ? <img className="avatar-image" src={f.avatarUrl} alt="" loading="lazy"/> : f.fullName.slice(0,1).toUpperCase()}</span><span className="contact-copy"><strong>{f.fullName}</strong><small>@{f.username}</small><em>{f.unreadCount ? f.unreadCount + ' unread' : (f.lastMessageAt ? new Date(f.lastMessageAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : 'Encrypted conversation')}</em></span>{f.unreadCount>0&&<span className="unread-badge">{f.unreadCount>99?'99+':f.unreadCount}</span>}</button>)}{visibleFriends.length===0&&<div className="empty-contacts"><Users size={24}/><p>No contacts yet</p><small>Add a friend by username to start a conversation.</small></div>}</div>
         {conversationCursor&&<button className="refresh-btn" disabled={loadingOlderConversations} onClick={loadOlderConversations}>{loadingOlderConversations?'Loading…':'Load older conversations'}</button>}
