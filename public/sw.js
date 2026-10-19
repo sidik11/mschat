@@ -3,8 +3,8 @@ self.addEventListener('push', event => {
   try { if (event.data) data = { ...data, ...event.data.json() }; } catch {}
   event.waitUntil(self.registration.showNotification(data.title || 'MS Chat', {
     body: data.body || 'You have a new message.',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/icons/icon.svg',
+    badge: '/icons/icon.svg',
     tag: data.tag || 'mschat-message',
     data: { url: data.url || '/' }
   }));
