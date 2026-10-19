@@ -7,7 +7,8 @@ import { google } from 'googleapis';
 const scrypt = promisify(scryptCb);
 const ROOT = 'mschat';
 const SESSION_COOKIE = 'mschat_session';
-const SESSION_SECONDS = Math.min(Math.max(Number(process.env.SESSION_TTL_SECONDS || 2592000), 3600), 2592000);
+const requestedSessionSeconds = Number(process.env.SESSION_TTL_SECONDS || 2592000);
+const SESSION_SECONDS = Number.isFinite(requestedSessionSeconds) ? Math.min(Math.max(requestedSessionSeconds, 3600), 2592000) : 2592000;
 
 export function json(res, status, body) {
   res.setHeader('Cache-Control', 'no-store, private');
