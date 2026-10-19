@@ -57,3 +57,12 @@ export async function decryptText(key, ciphertext, iv) {
   const clear = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(iv) }, key, fromB64(ciphertext));
   return new TextDecoder().decode(clear);
 }
+
+export async function encryptBytes(key, buffer) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, buffer);
+  return { buffer: encrypted, iv: b64(iv) };
+}
+export async function decryptBytes(key, buffer, ivText) {
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(ivText) }, key, buffer);
+}
