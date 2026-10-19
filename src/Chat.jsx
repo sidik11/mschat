@@ -24,6 +24,7 @@ export default function Chat({ user, onLogout }) {
   const [myPublicKey, setMyPublicKey] = useState(null);
   const [remoteKey, setRemoteKey] = useState(null);
   const [search, setSearch] = useState('');
+  const [isFriendTyping, setIsFriendTyping] = useState(false);
   const [transferProgress, setTransferProgress] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [complaintSubject, setComplaintSubject] = useState('');
@@ -53,7 +54,18 @@ export default function Chat({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
-    if (!activeFriend) { setMessages([]); setRemoteKey(null); return; }
+    post('/api/presence', {}).catch(() => {});
+    const timer = setInterval(() => post('/api/presence', {}).catch(() => {}), 20000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => refresh().catch(() => {}), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!activeFriend) { setMessages([]); setRemoteKey(null); setIsFriendTyping(false); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -91,6 +103,8 @@ export default function Chat({ user, onLogout }) {
         }));
         if (cancelled) return;
         setMessages(decoded);
+        const typingState = await api('/api/typing?conversationId=' + encodeURIComponent(activeFriend.conversationId));
+        if (!cancelled) setIsFriendTyping(Boolean(typingState.typing));
         const unread = decoded.filter(m => m.senderId !== user.id && !m.readBy?.[user.id]);
         for (const m of unread) {
           try {
@@ -148,6 +162,16 @@ export default function Chat({ user, onLogout }) {
     try { await post('/api/friends', { requestId, action }); await refresh(); }
     catch (e) { setError(e.message); }
   }
+  useEffect(() => {
+    if (!activeFriend) return;
+    const conversationId = activeFriend.conversationId;
+    const setTyping = isTyping => post('/api/typing', { conversationId, isTyping }).catch(() => {});
+    if (!draft.trim()) { setTyping(false); return; }
+    setTyping(true);
+    const timer = setInterval(() => setTyping(true), 2500);
+    return () => { clearInterval(timer); setTyping(false); };
+  }, [activeFriend?.conversationId, Boolean(draft.trim())]);
+
   async function send(e) {
     e.preventDefault();
     if (!activeFriend || !remoteKey || !draft.trim()) return;
@@ -189,8 +213,8 @@ export default function Chat({ user, onLogout }) {
       </aside>
       <section className="conversation-panel">
         {!activeFriend ? <div className="chat-empty"><span className="empty-logo"><MessageCircle size={32}/></span><h2>Your conversations, your space.</h2><p>Choose a contact or add a friend to begin an encrypted chat.</p><div><ShieldCheck size={16}/> Message content is encrypted in your browser before sending.</div></div> :
-          <><div className="conversation-head"><span className="contact-avatar">{activeFriend.fullName.slice(0,1).toUpperCase()}</span><div><strong>{activeFriend.fullName}</strong><small>@{activeFriend.username} · <ShieldCheck size={12}/> End-to-end encrypted</small></div></div>
-          <div className="message-list">{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.attachment ? <button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&(Object.keys(m.readBy||{}).length?<CheckCheck className="read-receipt" size={13}/>:Object.keys(m.deliveredTo||{}).length?<CheckCheck size={13}/>:<Check size={13}/>)}</small></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}</div>
+          <><div className="conversation-head"><span className="contact-avatar">{activeFriend.fullName.slice(0,1).toUpperCase()}</span><div><strong>{activeFriend.fullName}</strong><small>@{activeFriend.username} · {activeFriend.online?'Online':'Offline'} · <ShieldCheck size={12}/> End-to-end encrypted</small></div></div>
+          <div className="message-list">{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.attachment ? <button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&(Object.keys(m.readBy||{}).length?<CheckCheck className="read-receipt" size={13}/>:Object.keys(m.deliveredTo||{}).length?<CheckCheck size={13}/>:<Check size={13}/>)}</small></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}{isFriendTyping&&<div className="typing-indicator">{activeFriend.fullName} is typing…</div>}</div>
           <form className="message-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Write a message…" maxLength={4000} disabled={!remoteKey}/><input ref={fileInput} type="file" className="hidden-file-input" onChange={e=>sendFile(e.target.files?.[0])} aria-label="Attach a file"/><button type="button" className="attach-button" disabled={busy||!remoteKey} onClick={()=>fileInput.current?.click()} aria-label="Attach encrypted file"><Paperclip size={17}/></button><button disabled={busy||!remoteKey||!draft.trim()} aria-label="Send message"><Send size={18}/></button></form>{transferProgress&&<div className="file-transfer"><div><strong>{transferProgress.name}</strong><span>{transferProgress.phase} · {transferProgress.progress}%</span></div><div className="transfer-track"><span style={{width:transferProgress.progress+'%'}}/></div></div>}</>}
         {error&&<div className="chat-notice" role="status">{error}<button onClick={()=>setError('')}>×</button></div>}
         {pushState&&<div className="chat-notice" role="status">{pushState}<button onClick={()=>setPushState('')}>×</button></div>}
