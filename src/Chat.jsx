@@ -57,18 +57,21 @@ export default function Chat({ user, onLogout }) {
 
   async function refresh() {
     const [data, conversationData] = await Promise.all([api('/api/friends'), api('/api/conversations')]);
-    const onlineById = new Map((data.friends || []).map(f => [f.id, f]));
-    const page = (conversationData.conversations || []).map(c => ({ ...c.friend, ...(onlineById.get(c.friend.id) || {}), conversationId: c.conversationId, unreadCount: c.unreadCount || 0, lastMessageAt: c.updatedAt || 0 }));
+    const page = (conversationData.conversations || []).map(item => ({ ...item.friend, conversationId: item.conversationId, unreadCount: item.unreadCount || 0, lastMessageAt: item.updatedAt || 0 }));
     const requestedConversation = new URLSearchParams(window.location.search).get('conversation');
     if (requestedConversation) {
-      const requestedFriend = (data.friends || []).find(f => f.conversationId === requestedConversation);
-      if (requestedFriend && !page.some(f => f.id === requestedFriend.id)) page.unshift(requestedFriend);
-      if (requestedFriend) setActive(requestedFriend.id);
+      let match = page.find(friend => friend.conversationId === requestedConversation);
+      if (!match) {
+        try {
+          const requested = await api('/api/conversations?conversationId=' + encodeURIComponent(requestedConversation));
+          if (requested.conversation) { match = { ...requested.conversation.friend, conversationId: requested.conversation.conversationId, unreadCount: requested.conversation.unreadCount || 0, lastMessageAt: requested.conversation.updatedAt || 0 }; page.unshift(match); }
+        } catch {}
+      }
+      if (match) setActive(match.id);
     }
     setFriends(current => {
-      const allowed = new Set((data.friends || []).map(f => f.id));
-      const pageIds = new Set(page.map(f => f.id));
-      const preserved = current.filter(f => allowed.has(f.id) && !pageIds.has(f.id));
+      const pageIds = new Set(page.map(friend => friend.id));
+      const preserved = current.filter(friend => !pageIds.has(friend.id));
       return [...page, ...preserved];
     });
     setIncoming(data.incoming || []); setOutgoing(data.outgoing || []);
@@ -78,10 +81,9 @@ export default function Chat({ user, onLogout }) {
     if (!conversationCursor || loadingOlderConversations) return;
     setLoadingOlderConversations(true);
     try {
-      const [pageData, friendData] = await Promise.all([api('/api/conversations?before=' + encodeURIComponent(conversationCursor)), api('/api/friends')]);
-      const onlineById = new Map((friendData.friends || []).map(f => [f.id, f]));
-      const page = (pageData.conversations || []).map(c => ({ ...c.friend, ...(onlineById.get(c.friend.id) || {}), conversationId: c.conversationId, unreadCount: c.unreadCount || 0, lastMessageAt: c.updatedAt || 0 }));
-      setFriends(current => { const ids = new Set(current.map(f => f.id)); return [...current, ...page.filter(f => !ids.has(f.id))]; });
+      const pageData = await api('/api/conversations?before=' + encodeURIComponent(conversationCursor));
+      const page = (pageData.conversations || []).map(item => ({ ...item.friend, conversationId: item.conversationId, unreadCount: item.unreadCount || 0, lastMessageAt: item.updatedAt || 0 }));
+      setFriends(current => { const ids = new Set(current.map(friend => friend.id)); return [...current, ...page.filter(friend => !ids.has(friend.id))]; });
       setConversationCursor(pageData.nextCursor || null);
     } catch (e) { setError(e.message); } finally { setLoadingOlderConversations(false); }
   }
@@ -355,12 +357,12 @@ export default function Chat({ user, onLogout }) {
   }
   async function blockActiveFriend() {
     if (!activeFriend || !window.confirm('Block this user? New messages and attachments will be disabled in this conversation.')) return;
-    try { await post('/api/blocks', { userId: activeFriend.id, action: 'block' }); setActive(null); await refresh(); await loadBlockedUsers(); }
+    try { await post('/api/blocks', { userId: activeFriend.id, action: 'block' }); setFriends(old=>old.filter(friend=>friend.id!==activeFriend.id)); setActive(null); await refresh(); await loadBlockedUsers(); }
     catch (e) { setError(e.message); }
   }
   async function removeActiveFriend() {
     if (!activeFriend || !window.confirm('Remove this contact? The conversation history is not erased.')) return;
-    try { await post('/api/friends', { userId: activeFriend.id, action: 'remove-friend' }); setActive(null); await refresh(); }
+    try { await post('/api/friends', { userId: activeFriend.id, action: 'remove-friend' }); setFriends(old=>old.filter(friend=>friend.id!==activeFriend.id)); setActive(null); await refresh(); }
     catch (e) { setError(e.message); }
   }
   async function loadComplaints() { try { const d = await api('/api/complaints'); setMyComplaints(d.complaints || []); } catch (e) { setError(e.message); } }
