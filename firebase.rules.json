@@ -16,6 +16,26 @@
         ".indexOn": [
           "userId"
         ]
+      },
+      "users": {
+        ".indexOn": [
+          "createdAt"
+        ]
+      },
+      "reports": {
+        ".indexOn": [
+          "createdAt"
+        ]
+      },
+      "adminAuditLogs": {
+        ".indexOn": [
+          "createdAt"
+        ]
+      },
+      "friendRequestsByUser": {
+        ".indexOn": [
+          "createdAt"
+        ]
       }
     }
   }
