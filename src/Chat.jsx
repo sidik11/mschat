@@ -70,9 +70,11 @@ export default function Chat({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
-    post('/api/presence', {}).catch(() => {});
-    const timer = setInterval(() => post('/api/presence', {}).catch(() => {}), 20000);
-    return () => clearInterval(timer);
+    const heartbeat = () => { if (document.visibilityState === 'visible') post('/api/presence', {}).catch(() => {}); };
+    heartbeat();
+    const timer = setInterval(heartbeat, 45000);
+    document.addEventListener('visibilitychange', heartbeat);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', heartbeat); };
   }, []);
 
   useEffect(() => {
@@ -130,7 +132,8 @@ export default function Chat({ user, onLogout }) {
         }
       } catch {}
     };
-    const timer = setInterval(poll, 3000);
+    poll();
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') poll(); }, 8000);
     return () => { cancelled = true; clearInterval(timer); };
   }, [activeFriend, remoteKey, user.id]);
 
