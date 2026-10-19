@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hashPassword, verifyPassword, validatePassword, normalizeEmail, normalizeUsername, sha, publicUser } from '../api/_lib/core.js';
+import { hashPassword, verifyPassword, validatePassword, normalizeEmail, normalizeUsername, sha, publicUser } from '../lib/core.js';
 
 test('normalization is deterministic and case-insensitive', () => {
   assert.equal(normalizeEmail('  USER@Example.COM '), 'user@example.com');
