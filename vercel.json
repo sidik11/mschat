@@ -133,7 +133,11 @@
       "destination": "/api/index?route=auth/admin-otp-verify"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/api/:path*",
+      "destination": "/api/index?route=:path*"
+    },
+    {
+      "source": "/:path*",
       "destination": "/index.html"
     }
   ],
