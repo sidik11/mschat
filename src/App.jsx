@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Chat from './Chat.jsx';
 import Admin from './Admin.jsx';
+import Legal from './Legal.jsx';
 import { MessageCircle, ShieldCheck, Zap, LockKeyhole, Eye, EyeOff, ArrowRight, Check, Smartphone, Sparkles, Sun, Moon, LoaderCircle } from 'lucide-react';
 
 const features = [
@@ -81,6 +82,10 @@ export default function App() {
     setAuthenticatedUser(null); setMode('login'); setForm({ name: '', email: '', username: '', password: '', dateOfBirth: '', ageConfirmed: false }); setOtpRequested(false); setOtpCode('');
   }
 
+  const pathname = window.location.pathname.toLowerCase();
+  if (pathname === '/privacy' || pathname === '/privacy.html') return <Legal type="privacy"/>;
+  if (pathname === '/terms' || pathname === '/terms.html') return <Legal type="terms"/>;
+
   if (checkingSession) return <main className="app-shell"><header className="topbar"><a className="brand" href="/"><span className="brand-mark"><MessageCircle size={21}/></span><span>ms<span className="brand-light">chat</span><i>.</i></span></a></header><section className="chat-empty"><span className="empty-logo"><LoaderCircle className="spin" size={28}/></span><h2>Opening your space…</h2><p>Checking your secure session.</p></section></main>;
   if (authenticatedUser && window.location.pathname.startsWith('/admin')) return <Admin user={authenticatedUser} onLogout={logout} />;
   if (authenticatedUser) return <Chat user={authenticatedUser} onLogout={logout} />;
@@ -128,6 +133,6 @@ export default function App() {
     </section>
 
     <section className="bottom-strip"><div><span className="strip-icon"><Smartphone size={18}/></span><div><strong>Feels at home on every screen</strong><span>Phone, tablet, laptop — your layout adapts.</span></div></div><div><span className="check-dot"><Check size={14}/></span><span>Thoughtful by default</span></div><div className="bottom-status"><span className="status-pulse"/> Foundation build</div></section>
-    <footer><a className="footer-brand" href="/">MS Chat</a><span>Private conversations deserve thoughtful design.</span><span>© {new Date().getFullYear()} MS Chat</span></footer>
+    <footer><a className="footer-brand" href="/">MS Chat</a><span>Private conversations deserve thoughtful design.</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span><span>© {new Date().getFullYear()} MS Chat</span></footer>
   </main>;
 }
