@@ -30,16 +30,19 @@ async function setValue(key, value) {
 const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
 const fromB64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
 
-export async function getOrCreateDeviceKey() {
-  let privateKey = await getValue('ecdh-private');
-  let publicJwk = await getValue('ecdh-public-jwk');
+export async function getOrCreateDeviceKey(userId) {
+  if (typeof userId !== 'string' || !/^[A-Za-z0-9_-]{8,160}$/.test(userId)) throw new Error('Invalid account key namespace');
+  const privateKeyName = 'ecdh-private:' + userId;
+  const publicKeyName = 'ecdh-public-jwk:' + userId;
+  let privateKey = await getValue(privateKeyName);
+  let publicJwk = await getValue(publicKeyName);
   if (privateKey && publicJwk) return { privateKey, publicJwk };
   const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
   publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
   const privateJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
   privateKey = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
-  await setValue('ecdh-private', privateKey);
-  await setValue('ecdh-public-jwk', publicJwk);
+  await setValue(privateKeyName, privateKey);
+  await setValue(publicKeyName, publicJwk);
   return { privateKey, publicJwk };
 }
 export async function getConversationAesKey(privateKey, remotePublicJwk) {
