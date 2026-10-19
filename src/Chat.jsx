@@ -136,17 +136,23 @@ export default function Chat({ user, onLogout }) {
 
   async function sendFile(file) {
     if (!activeFriend || !remoteKey || !file) return;
-    if (file.size < 1 || file.size > 25 * 1024 * 1024) { setError('Choose a file between 1 byte and 25 MB.'); return; }
+    if (file.size < 1 || file.size > 50 * 1024 * 1024) { setError('Choose a file between 1 byte and 50 MB.'); return; }
+    const mimeType = file.type || 'application/octet-stream';
+    const mediaType = mimeType.startsWith('image/') ? 'image' : mimeType.startsWith('video/') ? 'video' : 'document';
+    if (mediaType === 'video') {
+      const duration = await new Promise(resolve => { const video = document.createElement('video'); const url = URL.createObjectURL(file); video.preload = 'metadata'; video.onloadedmetadata = () => { const d = video.duration; URL.revokeObjectURL(url); resolve(d); }; video.onerror = () => { URL.revokeObjectURL(url); resolve(Infinity); }; video.src = url; });
+      if (!Number.isFinite(duration) || duration > 30) { setError('Videos must be valid and no longer than 30 seconds.'); return; }
+    }
     setBusy(true); setError(''); setTransferProgress({ name: file.name, progress: 0, phase: 'Encrypting locally' });
     try {
       const uploadFingerprint = [file.name, file.size, file.lastModified].join(':');
       if (!pendingUploadIdempotency.current.has(uploadFingerprint)) pendingUploadIdempotency.current.set(uploadFingerprint, crypto.randomUUID());
       const encrypted = await encryptBytes(remoteKey, await file.arrayBuffer());
       setTransferProgress({ name: file.name, progress: 5, phase: 'Preparing private upload' });
-      const upload = await post('/api/attachments/upload-url', { conversationId: activeFriend.conversationId, fileName: file.name, size: file.size });
+      const upload = await post('/api/attachments/upload-url', { conversationId: activeFriend.conversationId, fileName: file.name, size: file.size, mimeType, mediaType });
       await uploadWithProgress(upload.uploadUrl, encrypted.buffer, progress => setTransferProgress({ name: file.name, progress, phase: 'Uploading encrypted file' }));
       const complete = await post('/api/attachments/complete', { attachmentId: upload.attachmentId });
-      const payload = { type: 'attachment', attachmentId: complete.attachment.id, fileName: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, fileIv: encrypted.iv };
+      const payload = { type: 'attachment', attachmentId: complete.attachment.id, fileName: file.name, mimeType, mediaType, size: file.size, fileIv: encrypted.iv };
       const encryptedMessage = await encryptText(remoteKey, JSON.stringify(payload));
       const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encryptedMessage, keyVersion: 1, attachmentId: payload.attachmentId, idempotencyKey: pendingUploadIdempotency.current.get(uploadFingerprint) });
       pendingUploadIdempotency.current.delete(uploadFingerprint);
