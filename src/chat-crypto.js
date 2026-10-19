@@ -76,3 +76,24 @@ export async function encryptBytes(key, buffer) {
 export async function decryptBytes(key, buffer, ivText) {
   return crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(ivText) }, key, buffer);
 }
+
+export async function publicKeyFingerprint(jwk) {
+  const canonical = JSON.stringify({ kty: jwk?.kty, crv: jwk?.crv, x: jwk?.x, y: jwk?.y });
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical)));
+  return Array.from(digest, b => b.toString(16).padStart(2, '0')).join('').match(/.{1,4}/g).join(' ');
+}
+export async function checkRemoteKey(username, jwk) {
+  const fingerprint = await publicKeyFingerprint(jwk);
+  const key = 'trusted-remote-key:' + username;
+  const previous = await getValue(key);
+  if (!previous) {
+    await setValue(key, { fingerprint, pinnedAt: Date.now() });
+    return { fingerprint, firstSeen: true, changed: false };
+  }
+  return { fingerprint, firstSeen: false, changed: previous.fingerprint !== fingerprint, previous: previous.fingerprint };
+}
+export async function trustRemoteKey(username, jwk) {
+  const fingerprint = await publicKeyFingerprint(jwk);
+  await setValue('trusted-remote-key:' + username, { fingerprint, pinnedAt: Date.now() });
+  return fingerprint;
+}
