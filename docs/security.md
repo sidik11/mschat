@@ -1,22 +1,27 @@
-# Security baseline and open items
+# Security Notes and Known Gaps
 
-## Implemented in this foundation
+## Controls present in this branch
+- scrypt password hashes with salts; no plaintext passwords.
+- Random opaque session cookies with HttpOnly, Secure in production and SameSite=Lax attributes; server stores token hashes.
+- Per-user session indexes, password change with session rotation, logout and revoke-other-sessions.
+- Registration OTP digest uses HMAC-SHA-256 with server-only `OTP_HMAC_SECRET`; OTPs expire in five minutes, are attempt-limited and resend-throttled.
+- Administrator sessions require password plus email OTP. Bootstrap is one-time and secret comparison is constant-time.
+- Origin checks on state-changing routes, per-route rate limits, restrictive headers/CSP, and generic errors.
+- Server-side conversation membership, friendship, block and attachment ownership checks.
+- RTDB direct client access is denied in `firebase.rules.json`; records are under `mschat/`.
+- R2 keys are prefix-checked before access/deletion; profile images are signature-checked after upload.
+- Private message bodies are not intentionally logged or exposed to the admin dashboard.
 
-- No secret values are committed; `.env.example` contains placeholders.
-- Firebase Admin initialization is server-side.
-- Default Firebase rules deny client reads and writes.
-- Registration and login endpoints fail closed with 503 while secure authentication is not implemented.
-- Health response reports whether integrations appear configured, not credentials.
-- UI honors `prefers-reduced-motion`.
+## Not yet production-complete
+- No independently reviewed Signal Protocol or ratcheting implementation. Current static ECDH/AES-GCM lacks forward secrecy and post-compromise recovery.
+- First-contact key authenticity/key transparency is not provided; local fingerprint pinning only warns about later changes on that browser.
+- No secure multi-device key transfer or encrypted recovery mechanism.
+- Account deletion disables access and queues work, but automated end-to-end cleanup of all account-linked records and objects is not complete.
+- Attachment signatures and video duration are checked in the sender's browser before encryption. Since the server receives ciphertext, it cannot independently verify the underlying plaintext file or duration without a different trust model. A malicious client can bypass these checks.
+- Direct uploads are not resumable; a failed upload must be restarted.
+- Provider-level Firebase/R2 metrics, full API latency/error telemetry, and historical aggregate initialization are not implemented. Admin counters are tracked only from their recorded start time.
+- Administrator MFA is email OTP, not TOTP or hardware-backed MFA.
+- No independent penetration test, dependency audit report or load test has been completed.
 
-## Not yet safe to release
-
-- Registration currently stops before account creation. Do not treat the 202 response as verified registration.
-- Registration challenge rate limiting and resend cooldowns still need a durable, abuse-resistant implementation.
-- The account uniqueness check must be converted to an atomic reservation/commit protocol to prevent race conditions before enabling account creation.
-- Session creation, rotation, CSRF protection, origin policy, and revocation are not complete.
-- No E2EE protocol is integrated yet; do not send private content through this foundation as though it is encrypted.
-- R2 upload authorization, push notifications, admin MFA, audit logging, reports, and account deletion remain to be implemented.
-- Configure restrictive production CSP and security headers, review dependencies, and run automated security tests.
-
-Never expose secrets in logs, API responses, frontend bundles, or Git history. If a secret is ever committed, rotate it.
+## Release rule
+Do not claim production readiness until a reviewed E2EE protocol, complete deletion workflow, Firebase Emulator authorization tests, real Gmail/R2/Web Push integration tests, dependency audit, and realistic load test pass.
