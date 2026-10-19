@@ -14,6 +14,14 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const uid = String(req.body?.userId || '');
       const action = String(req.body?.action || '');
+      if (['resolve-complaint', 'reopen-complaint'].includes(action)) {
+        const complaintId = String(req.body?.complaintId || '');
+        if (!/^[A-Za-z0-9_-]{8,160}$/.test(complaintId)) return json(res, 400, { error: 'INVALID_COMPLAINT' });
+        const complaintRef = root.child('complaints/' + complaintId), complaint = (await complaintRef.get()).val();
+        if (!complaint) return json(res, 404, { error: 'COMPLAINT_NOT_FOUND' });
+        await complaintRef.update({ status: action === 'resolve-complaint' ? 'resolved' : 'open', updatedAt: Date.now(), handledBy: auth.uid });
+        return json(res, 200, { ok: true });
+      }
       if (!/^[A-Za-z0-9_-]{8,160}$/.test(uid) || !['block', 'unblock'].includes(action)) return json(res, 400, { error: 'INVALID_ACTION' });
       if (uid === auth.uid) return json(res, 400, { error: 'CANNOT_BLOCK_SELF' });
       const ref = root.child('users/' + uid), snap = await ref.get();
