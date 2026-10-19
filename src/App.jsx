@@ -23,6 +23,10 @@ export default function App() {
   const [otpCode, setOtpCode] = useState('');
 
   useEffect(() => {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     fetch('/api/auth/me', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(data => { if (!cancelled && data?.user) setAuthenticatedUser(data.user); }).catch(() => {}).finally(() => { if (!cancelled) setCheckingSession(false); });
     return () => { cancelled = true; };
