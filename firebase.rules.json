@@ -37,6 +37,13 @@
         ".indexOn": [
           "createdAt"
         ]
+      },
+      "userConversationState": {
+        "$uid": {
+          ".indexOn": [
+            "lastMessageAt"
+          ]
+        }
       }
     }
   }
