@@ -1,8 +1,181 @@
 {
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/api/auth/request-otp",
+      "destination": "/api/index?route=auth/request-otp"
+    },
+    {
+      "source": "/api/auth/register",
+      "destination": "/api/index?route=auth/register"
+    },
+    {
+      "source": "/api/auth/login",
+      "destination": "/api/index?route=auth/login"
+    },
+    {
+      "source": "/api/auth/me",
+      "destination": "/api/index?route=auth/me"
+    },
+    {
+      "source": "/api/auth/logout",
+      "destination": "/api/index?route=auth/logout"
+    },
+    {
+      "source": "/api/friends/request",
+      "destination": "/api/index?route=friends/request"
+    },
+    {
+      "source": "/api/friends",
+      "destination": "/api/index?route=friends"
+    },
+    {
+      "source": "/api/messages",
+      "destination": "/api/index?route=messages"
+    },
+    {
+      "source": "/api/messages/receipt",
+      "destination": "/api/index?route=messages/receipt"
+    },
+    {
+      "source": "/api/keys",
+      "destination": "/api/index?route=keys"
+    },
+    {
+      "source": "/api/push/subscribe",
+      "destination": "/api/index?route=push/subscribe"
+    },
+    {
+      "source": "/api/push/public-key",
+      "destination": "/api/index?route=push/public-key"
+    },
+    {
+      "source": "/api/complaints",
+      "destination": "/api/index?route=complaints"
+    },
+    {
+      "source": "/api/admin/bootstrap",
+      "destination": "/api/index?route=admin/bootstrap"
+    },
+    {
+      "source": "/api/admin",
+      "destination": "/api/index?route=admin"
+    },
+    {
+      "source": "/api/cron/cleanup",
+      "destination": "/api/index?route=cron/cleanup"
+    },
+    {
+      "source": "/api/attachments/upload-url",
+      "destination": "/api/index?route=attachments/upload-url"
+    },
+    {
+      "source": "/api/attachments/complete",
+      "destination": "/api/index?route=attachments/complete"
+    },
+    {
+      "source": "/api/attachments/download-url",
+      "destination": "/api/index?route=attachments/download-url"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/index?route=health"
+    },
+    {
+      "source": "/api/presence",
+      "destination": "/api/index?route=presence"
+    },
+    {
+      "source": "/api/typing",
+      "destination": "/api/index?route=typing"
+    },
+    {
+      "source": "/api/profile",
+      "destination": "/api/index?route=profile"
+    },
+    {
+      "source": "/api/users",
+      "destination": "/api/index?route=users"
+    },
+    {
+      "source": "/api/settings",
+      "destination": "/api/index?route=settings"
+    },
+    {
+      "source": "/api/blocks",
+      "destination": "/api/index?route=blocks"
+    },
+    {
+      "source": "/api/reports",
+      "destination": "/api/index?route=reports"
+    },
+    {
+      "source": "/api/account",
+      "destination": "/api/index?route=account"
+    },
+    {
+      "source": "/api/messages/delete",
+      "destination": "/api/index?route=messages/delete"
+    },
+    {
+      "source": "/api/conversations",
+      "destination": "/api/index?route=conversations"
+    },
+    {
+      "source": "/api/security",
+      "destination": "/api/index?route=security"
+    },
+    {
+      "source": "/api/profile-image",
+      "destination": "/api/index?route=profile-image"
+    },
+    {
+      "source": "/api/auth/admin-otp-verify",
+      "destination": "/api/index?route=auth/admin-otp-verify"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index?route=:path*"
+    },
+    {
+      "source": "/:path*",
       "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/cleanup",
+      "schedule": "0 3 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.r2.cloudflarestorage.com; connect-src 'self' https://*.r2.cloudflarestorage.com; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests"
+        }
+      ]
     }
   ]
 }

@@ -4,7 +4,47 @@
     ".write": false,
     "mschat": {
       ".read": false,
-      ".write": false
+      ".write": false,
+      "messages": {
+        "$conversationId": {
+          ".indexOn": [
+            "createdAt"
+          ]
+        }
+      },
+      "complaints": {
+        ".indexOn": [
+          "userId",
+          "createdAt"
+        ]
+      },
+      "users": {
+        ".indexOn": [
+          "createdAt"
+        ]
+      },
+      "reports": {
+        ".indexOn": [
+          "createdAt"
+        ]
+      },
+      "adminAuditLogs": {
+        ".indexOn": [
+          "createdAt"
+        ]
+      },
+      "friendRequestsByUser": {
+        ".indexOn": [
+          "createdAt"
+        ]
+      },
+      "userConversationState": {
+        "$uid": {
+          ".indexOn": [
+            "lastMessageAt"
+          ]
+        }
+      }
     }
   }
 }
