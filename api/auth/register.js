@@ -41,7 +41,7 @@ export default async function handler(req, res) {
       return json(res, 400, { error: 'OTP_ALREADY_USED', message: 'Request a new verification code.' });
     }
     const now = Date.now();
-    const user = { id: uid, fullName, email, username, normalizedUsername, passwordHash: await hashPassword(password), createdAt: now, updatedAt: now, disabled: false };
+    const user = { id: uid, fullName, email, username, normalizedUsername, passwordHash: await hashPassword(password), createdAt: now, updatedAt: now, emailVerified: true, role: 'user', disabled: false };
     await userRef.set(user);
     await issueSession(res, uid);
     return json(res, 201, { ok: true, user: publicUser(user) });
