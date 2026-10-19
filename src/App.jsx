@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Chat from './Chat.jsx';
 import { MessageCircle, ShieldCheck, Zap, LockKeyhole, Eye, EyeOff, ArrowRight, Check, Smartphone, Sparkles, Sun, Moon, LoaderCircle } from 'lucide-react';
 
 const features = [
@@ -9,6 +10,8 @@ const features = [
 
 export default function App() {
   const [mode, setMode] = useState('signup');
+  const [authenticatedUser, setAuthenticatedUser] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('mschat-theme') || 'light');
   const [form, setForm] = useState({ name: '', email: '', username: '', password: '', ageConfirmed: false });
@@ -17,6 +20,12 @@ export default function App() {
   const [noticeType, setNoticeType] = useState('info');
   const [otpRequested, setOtpRequested] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/me', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(data => { if (!cancelled && data?.user) setAuthenticatedUser(data.user); }).catch(() => {}).finally(() => { if (!cancelled) setCheckingSession(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -50,6 +59,7 @@ export default function App() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'This service is not configured yet. Please try again later.');
+      if (data.user) { setAuthenticatedUser(data.user); return; }
       setNoticeType('success');
       setNotice(data.message || 'Signed in successfully.');
     } catch (error) {
@@ -57,6 +67,14 @@ export default function App() {
       setNotice(error.message || 'Could not connect. Check your connection and retry.');
     } finally { setBusy(false); }
   }
+
+  async function logout() {
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+    setAuthenticatedUser(null); setMode('login'); setForm({ name: '', email: '', username: '', password: '', ageConfirmed: false }); setOtpRequested(false); setOtpCode('');
+  }
+
+  if (checkingSession) return <main className="app-shell"><header className="topbar"><a className="brand" href="/"><span className="brand-mark"><MessageCircle size={21}/></span><span>ms<span className="brand-light">chat</span><i>.</i></span></a></header><section className="chat-empty"><span className="empty-logo"><LoaderCircle className="spin" size={28}/></span><h2>Opening your space…</h2><p>Checking your secure session.</p></section></main>;
+  if (authenticatedUser) return <Chat user={authenticatedUser} onLogout={logout} />;
 
   return <main className="app-shell">
     <header className="topbar">
