@@ -1,4 +1,4 @@
-import { json, method, requireOrigin, session, rootRef, safeError } from '../_lib/core.js';
+import { json, method, requireOrigin, session, rootRef, safeError } from '../../lib/core.js';
 export default async function handler(req, res) {
   if (!method(req, res, ['GET', 'POST']) || (req.method === 'POST' && !requireOrigin(req, res))) return;
   try {
