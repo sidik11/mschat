@@ -21,6 +21,14 @@ import downloadUrl from '../lib/handlers/attachments/download-url.js';
 import health from '../lib/handlers/health.js';
 import presence from '../lib/handlers/presence.js';
 import typing from '../lib/handlers/typing.js';
+import profile from '../lib/handlers/profile.js';
+import users from '../lib/handlers/users.js';
+import settings from '../lib/handlers/settings.js';
+import blocks from '../lib/handlers/blocks.js';
+import reports from '../lib/handlers/reports.js';
+import account from '../lib/handlers/account.js';
+import deleteMessage from '../lib/handlers/messages/delete.js';
+import conversations from '../lib/handlers/conversations.js';
 
 const routes = new Map([
   ['auth/request-otp', requestOtp],
@@ -44,7 +52,15 @@ const routes = new Map([
   ['attachments/download-url', downloadUrl],
   ['health', health],
   ['presence', presence],
-  ['typing', typing]
+  ['typing', typing],
+  ['profile', profile],
+  ['users', users],
+  ['settings', settings],
+  ['blocks', blocks],
+  ['reports', reports],
+  ['account', account],
+  ['messages/delete', deleteMessage],
+  ['conversations', conversations]
 ]);
 
 function routeName(req) {
