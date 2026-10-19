@@ -16,6 +16,10 @@ export default function Chat({ user, onLogout }) {
   const [incoming, setIncoming] = useState([]);
   const [active, setActive] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [olderMessageCursor, setOlderMessageCursor] = useState(null);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [conversationCursor, setConversationCursor] = useState(null);
+  const [loadingOlderConversations, setLoadingOlderConversations] = useState(false);
   const [draft, setDraft] = useState('');
   const [username, setUsername] = useState('');
   const [busy, setBusy] = useState(false);
@@ -51,11 +55,34 @@ export default function Chat({ user, onLogout }) {
   const activeFriend = useMemo(() => friends.find(f => f.id === active) || null, [friends, active]);
 
   async function refresh() {
-    const data = await api('/api/friends');
-    setFriends(data.friends || []);
-    setIncoming(data.incoming || []);
+    const [data, conversationData] = await Promise.all([api('/api/friends'), api('/api/conversations')]);
+    const onlineById = new Map((data.friends || []).map(f => [f.id, f]));
+    const page = (conversationData.conversations || []).map(c => ({ ...c.friend, ...(onlineById.get(c.friend.id) || {}), conversationId: c.conversationId, unreadCount: c.unreadCount || 0, lastMessageAt: c.updatedAt || 0 }));
     const requestedConversation = new URLSearchParams(window.location.search).get('conversation');
-    if (requestedConversation) { const match = (data.friends || []).find(f => f.conversationId === requestedConversation); if (match) setActive(match.id); }
+    if (requestedConversation) {
+      const requestedFriend = (data.friends || []).find(f => f.conversationId === requestedConversation);
+      if (requestedFriend && !page.some(f => f.id === requestedFriend.id)) page.unshift(requestedFriend);
+      if (requestedFriend) setActive(requestedFriend.id);
+    }
+    setFriends(current => {
+      const allowed = new Set((data.friends || []).map(f => f.id));
+      const pageIds = new Set(page.map(f => f.id));
+      const preserved = current.filter(f => allowed.has(f.id) && !pageIds.has(f.id));
+      return [...page, ...preserved];
+    });
+    setIncoming(data.incoming || []);
+    setConversationCursor(conversationData.nextCursor || null);
+  }
+  async function loadOlderConversations() {
+    if (!conversationCursor || loadingOlderConversations) return;
+    setLoadingOlderConversations(true);
+    try {
+      const [pageData, friendData] = await Promise.all([api('/api/conversations?before=' + encodeURIComponent(conversationCursor)), api('/api/friends')]);
+      const onlineById = new Map((friendData.friends || []).map(f => [f.id, f]));
+      const page = (pageData.conversations || []).map(c => ({ ...c.friend, ...(onlineById.get(c.friend.id) || {}), conversationId: c.conversationId, unreadCount: c.unreadCount || 0, lastMessageAt: c.updatedAt || 0 }));
+      setFriends(current => { const ids = new Set(current.map(f => f.id)); return [...current, ...page.filter(f => !ids.has(f.id))]; });
+      setConversationCursor(pageData.nextCursor || null);
+    } catch (e) { setError(e.message); } finally { setLoadingOlderConversations(false); }
   }
   useEffect(() => {
     let cancelled = false;
@@ -114,7 +141,7 @@ export default function Chat({ user, onLogout }) {
             return { ...m, text: clear };
           } catch { return { ...m, text: 'Unable to decrypt on this device' }; }
         }));
-        if (!cancelled) setMessages(decoded);
+        if (!cancelled) { setMessages(decoded); setOlderMessageCursor((data.messages || []).length === 100 ? data.nextCursor : null); }
       } catch (e) { if (!cancelled) { setMessages([]); setError(e.message); } }
     })();
     return () => { cancelled = true; };
@@ -136,6 +163,7 @@ export default function Chat({ user, onLogout }) {
         }));
         if (cancelled) return;
         setMessages(decoded);
+        if ((data.messages || []).length === 100) setOlderMessageCursor(data.nextCursor || null);
         const typingState = await api('/api/typing?conversationId=' + encodeURIComponent(activeFriend.conversationId));
         if (!cancelled) setIsFriendTyping(Boolean(typingState.typing));
         const unreadIds = new Set(data.unreadMessageIds || []);
@@ -287,6 +315,20 @@ export default function Chat({ user, onLogout }) {
     if (confirmation !== user.username) { setSettingsMessage('Username confirmation did not match.'); return; }
     try { await api('/api/account', { method: 'DELETE', body: JSON.stringify({ confirmation }) }); await onLogout(); }
     catch (e) { setSettingsMessage(e.message); }
+  }
+  async function loadOlderMessages() {
+    if (!activeFriend || !remoteKey || !olderMessageCursor || loadingOlderMessages) return;
+    setLoadingOlderMessages(true);
+    try {
+      const data = await api('/api/messages?conversationId=' + encodeURIComponent(activeFriend.conversationId) + '&before=' + encodeURIComponent(olderMessageCursor));
+      const decoded = await Promise.all((data.messages || []).map(async m => {
+        if (m.deletedForEveryone) return { ...m, text: 'This message was deleted.' };
+        try { const clear = await decryptText(remoteKey, m.ciphertext, m.iv); try { const payload = JSON.parse(clear); if (payload?.type === 'attachment' && /^[a-f0-9]{32}$/.test(payload.attachmentId || '')) return { ...m, text: payload.fileName || 'Encrypted attachment', attachment: payload }; } catch {} return { ...m, text: clear }; }
+        catch { return { ...m, text: 'Unable to decrypt on this device' }; }
+      }));
+      setMessages(current => { const existing = new Set(current.map(m => m.id)); return [...decoded.filter(m => !existing.has(m.id)), ...current]; });
+      setOlderMessageCursor(decoded.length === 100 ? data.nextCursor : null);
+    } catch (e) { setError(e.message); } finally { setLoadingOlderMessages(false); }
   }
   async function deleteMessageAction(message, scope) {
     if (!activeFriend) return;
