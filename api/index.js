@@ -19,6 +19,8 @@ import uploadUrl from '../lib/handlers/attachments/upload-url.js';
 import completeUpload from '../lib/handlers/attachments/complete.js';
 import downloadUrl from '../lib/handlers/attachments/download-url.js';
 import health from '../lib/handlers/health.js';
+import presence from '../lib/handlers/presence.js';
+import typing from '../lib/handlers/typing.js';
 
 const routes = new Map([
   ['auth/request-otp', requestOtp],
@@ -40,7 +42,9 @@ const routes = new Map([
   ['attachments/upload-url', uploadUrl],
   ['attachments/complete', completeUpload],
   ['attachments/download-url', downloadUrl],
-  ['health', health]
+  ['health', health],
+  ['presence', presence],
+  ['typing', typing]
 ]);
 
 function routeName(req) {
