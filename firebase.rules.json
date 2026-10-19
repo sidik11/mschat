@@ -4,7 +4,12 @@
     ".write": false,
     "mschat": {
       ".read": false,
-      ".write": false
+      ".write": false,
+      "messages": {
+        "$conversationId": {
+          ".indexOn": ["createdAt"]
+        }
+      }
     }
   }
 }
