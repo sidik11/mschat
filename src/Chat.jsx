@@ -90,7 +90,7 @@ export default function Chat({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
-    if (!activeFriend) { setMessages([]); setRemoteKey(null); setIsFriendTyping(false); return; }
+    if (!activeFriend) { setMessages([]); setRemoteKey(null); setRemoteFingerprint(''); setIsFriendTyping(false); return; }
     let cancelled = false;
     setRemoteKey(null); setRemoteFingerprint('');
     (async () => {
