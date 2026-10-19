@@ -1,4 +1,4 @@
-import { json, method, requireOrigin, session, rootRef, safeError } from '../_lib/core.js';
+import { json, method, requireOrigin, session, rootRef, safeError } from '../../lib/core.js';
 async function adminAuth(req, res) {
   const auth = await session(req);
   if (!auth) { json(res, 401, { error: 'UNAUTHENTICATED' }); return null; }
