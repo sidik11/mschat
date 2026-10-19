@@ -31,6 +31,7 @@ import deleteMessage from '../lib/handlers/messages/delete.js';
 import conversations from '../lib/handlers/conversations.js';
 import security from '../lib/handlers/security.js';
 import profileImage from '../lib/handlers/profile-image.js';
+import adminOtpVerify from '../lib/handlers/auth/admin-otp-verify.js';
 
 const routes = new Map([
   ['auth/request-otp', requestOtp],
@@ -64,7 +65,8 @@ const routes = new Map([
   ['messages/delete', deleteMessage],
   ['conversations', conversations],
   ['security', security],
-  ['profile-image', profileImage]
+  ['profile-image', profileImage],
+  ['auth/admin-otp-verify', adminOtpVerify]
 ]);
 
 function routeName(req) {
