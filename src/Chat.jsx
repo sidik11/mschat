@@ -66,6 +66,31 @@ export default function Chat({ user, onLogout }) {
     return () => { cancelled = true; };
   }, [active, friends, privateKey]);
 
+  useEffect(() => {
+    if (!activeFriend || !remoteKey) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const data = await api('/api/messages?conversationId=' + encodeURIComponent(activeFriend.conversationId));
+        const decoded = await Promise.all((data.messages || []).map(async m => {
+          try { return { ...m, text: await decryptText(remoteKey, m.ciphertext, m.iv) }; }
+          catch { return { ...m, text: 'Unable to decrypt on this device' }; }
+        }));
+        if (cancelled) return;
+        setMessages(decoded);
+        const unread = decoded.filter(m => m.senderId !== user.id && !m.readBy?.[user.id]);
+        for (const m of unread) {
+          try {
+            await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'delivered' });
+            await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'read' });
+          } catch {}
+        }
+      } catch {}
+    };
+    const timer = setInterval(poll, 3000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [activeFriend, remoteKey, user.id]);
+
   async function addFriend(e) {
     e.preventDefault(); setError(''); setBusy(true);
     try { await post('/api/friends/request', { username }); setUsername(''); setError('Friend request sent.'); await refresh(); }
@@ -82,7 +107,7 @@ export default function Chat({ user, onLogout }) {
     try {
       const encrypted = await encryptText(remoteKey, draft.trim());
       const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encrypted, keyVersion: 1 });
-      setMessages(old => [...old, { id: result.id, senderId: user.id, text: draft.trim(), createdAt: result.createdAt }]);
+      setMessages(old => [...old, { id: result.id, senderId: user.id, text: draft.trim(), createdAt: result.createdAt, deliveredTo: {}, readBy: {} }]);
       setDraft('');
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
@@ -115,7 +140,7 @@ export default function Chat({ user, onLogout }) {
       <section className="conversation-panel">
         {!activeFriend ? <div className="chat-empty"><span className="empty-logo"><MessageCircle size={32}/></span><h2>Your conversations, your space.</h2><p>Choose a contact or add a friend to begin an encrypted chat.</p><div><ShieldCheck size={16}/> Message content is encrypted in your browser before sending.</div></div> :
           <><div className="conversation-head"><span className="contact-avatar">{activeFriend.fullName.slice(0,1).toUpperCase()}</span><div><strong>{activeFriend.fullName}</strong><small>@{activeFriend.username} · <ShieldCheck size={12}/> End-to-end encrypted</small></div></div>
-          <div className="message-list">{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&<CheckCheck size={13}/>}</small></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}</div>
+          <div className="message-list">{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&<CheckCheck size={13} style={{opacity:Object.keys(m.readBy||{}).length?1:Object.keys(m.deliveredTo||{}).length?.75:.45}}/>}</small></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}</div>
           <form className="message-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Write a message…" maxLength={4000} disabled={!remoteKey}/><button disabled={busy||!remoteKey||!draft.trim()} aria-label="Send message"><Send size={18}/></button></form></>}
         {error&&<div className="chat-notice" role="status">{error}<button onClick={()=>setError('')}>×</button></div>}
         {pushState&&<div className="chat-notice" role="status">{pushState}<button onClick={()=>setPushState('')}>×</button></div>}
