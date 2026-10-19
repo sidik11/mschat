@@ -5,7 +5,7 @@ MS Chat is a mobile-first one-to-one messaging application using React/Vite, a s
 ## Implemented in this branch
 
 - Email OTP registration, scrypt password hashing, normalized email/username uniqueness indexes, persistent HttpOnly session cookies, logout/revocation, and basic rate limiting.
-- Authenticated contacts and friend requests, direct conversations, encrypted message payloads, sent/delivered/read receipt endpoints, and periodic message refresh.
+- Authenticated contacts and friend requests, direct conversations, encrypted message payloads, sent/delivered/read receipts, online presence, typing indicators, and periodic message refresh.
 - Browser-generated P-256 ECDH device keypair with a non-extractable private key stored in IndexedDB; AES-GCM encryption for messages and files before upload.
 - Private Cloudflare R2 upload/download URLs; uploaded file content is encrypted in the browser and the API validates conversation membership.
 - Web Push subscription storage and generic push notifications that do not expose message contents.
