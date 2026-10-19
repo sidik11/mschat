@@ -31,6 +31,17 @@ export default function Chat({ user, onLogout }) {
   const [complaintDescription, setComplaintDescription] = useState('');
   const [myComplaints, setMyComplaints] = useState([]);
   const fileInput = useRef(null);
+  const pendingTextIdempotency = useRef({ draft: '', key: '' });
+  const pendingUploadIdempotency = useRef(new Map());
+  const [profile, setProfile] = useState(null);
+  const [profileName, setProfileName] = useState(user.fullName || '');
+  const [profileBio, setProfileBio] = useState('');
+  const [profileDob, setProfileDob] = useState('');
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [settingsMessage, setSettingsMessage] = useState('');
+  const [privacySettings, setPrivacySettings] = useState({ lastSeenVisibility: 'friends', onlineVisibility: 'friends', readReceiptsEnabled: true, notificationsEnabled: false, notificationPrivacy: 'generic' });
+  const [userSearch, setUserSearch] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
   const [pushState, setPushState] = useState('');
   const activeFriend = useMemo(() => friends.find(f => f.id === active) || null, [friends, active]);
 
@@ -48,6 +59,11 @@ export default function Chat({ user, onLogout }) {
         const me = await api('/api/keys');
         if (!cancelled) { setPrivateKey(pair.privateKey); setMyPublicKey(me.publicKey || pair.publicJwk); }
         await refresh();
+        const [profileData, settingsData, blocksData] = await Promise.all([api('/api/profile'), api('/api/settings'), api('/api/blocks')]);
+        if (!cancelled) {
+          setProfile(profileData.profile); setProfileName(profileData.profile.fullName || ''); setProfileBio(profileData.profile.bio || ''); setProfileDob(profileData.profile.dateOfBirth || '');
+          setPrivacySettings(settingsData.settings); setBlockedUsers(blocksData.blocks || []);
+        }
       } catch (e) { if (!cancelled) setError(e.message); }
     })();
     return () => { cancelled = true; };
@@ -123,6 +139,8 @@ export default function Chat({ user, onLogout }) {
     if (file.size < 1 || file.size > 25 * 1024 * 1024) { setError('Choose a file between 1 byte and 25 MB.'); return; }
     setBusy(true); setError(''); setTransferProgress({ name: file.name, progress: 0, phase: 'Encrypting locally' });
     try {
+      const uploadFingerprint = [file.name, file.size, file.lastModified].join(':');
+      if (!pendingUploadIdempotency.current.has(uploadFingerprint)) pendingUploadIdempotency.current.set(uploadFingerprint, crypto.randomUUID());
       const encrypted = await encryptBytes(remoteKey, await file.arrayBuffer());
       setTransferProgress({ name: file.name, progress: 5, phase: 'Preparing private upload' });
       const upload = await post('/api/attachments/upload-url', { conversationId: activeFriend.conversationId, fileName: file.name, size: file.size });
@@ -130,7 +148,8 @@ export default function Chat({ user, onLogout }) {
       const complete = await post('/api/attachments/complete', { attachmentId: upload.attachmentId });
       const payload = { type: 'attachment', attachmentId: complete.attachment.id, fileName: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, fileIv: encrypted.iv };
       const encryptedMessage = await encryptText(remoteKey, JSON.stringify(payload));
-      const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encryptedMessage, keyVersion: 1, attachmentId: payload.attachmentId });
+      const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encryptedMessage, keyVersion: 1, attachmentId: payload.attachmentId, idempotencyKey: pendingUploadIdempotency.current.get(uploadFingerprint) });
+      pendingUploadIdempotency.current.delete(uploadFingerprint);
       setMessages(old => [...old, { id: result.id, senderId: user.id, text: file.name, attachment: payload, createdAt: result.createdAt, deliveredTo: {}, readBy: {} }]);
       setTransferProgress({ name: file.name, progress: 100, phase: 'Sent securely' });
       setTimeout(() => setTransferProgress(null), 2500);
@@ -177,11 +196,43 @@ export default function Chat({ user, onLogout }) {
     if (!activeFriend || !remoteKey || !draft.trim()) return;
     setBusy(true); setError('');
     try {
-      const encrypted = await encryptText(remoteKey, draft.trim());
-      const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encrypted, keyVersion: 1 });
+      const messageText = draft.trim();
+      if (pendingTextIdempotency.current.draft !== messageText) pendingTextIdempotency.current = { draft: messageText, key: crypto.randomUUID() };
+      const encrypted = await encryptText(remoteKey, messageText);
+      const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encrypted, keyVersion: 1, idempotencyKey: pendingTextIdempotency.current.key });
       setMessages(old => [...old, { id: result.id, senderId: user.id, text: draft.trim(), createdAt: result.createdAt, deliveredTo: {}, readBy: {} }]);
-      setDraft('');
+      setDraft(''); pendingTextIdempotency.current = { draft: '', key: '' };
     } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+  async function searchUsers(value) {
+    setUserSearch(value);
+    const q = value.trim().replace(/^@/, '').toLowerCase();
+    if (q.length < 2) { setSearchResults([]); return; }
+    try { const data = await api('/api/users?q=' + encodeURIComponent(q)); setSearchResults(data.users || []); } catch { setSearchResults([]); }
+  }
+  async function saveProfile(e) {
+    e.preventDefault(); setBusy(true); setSettingsMessage('');
+    try {
+      const data = await post('/api/profile', { fullName: profileName, bio: profileBio, ...(profileDob ? { dateOfBirth: profileDob } : {}) });
+      setProfile(data.profile); setSettingsMessage('Profile saved.');
+    } catch (e) { setSettingsMessage(e.message); } finally { setBusy(false); }
+  }
+  async function savePrivacySettings() {
+    setBusy(true); setSettingsMessage('');
+    try { const data = await post('/api/settings', privacySettings); setPrivacySettings(data.settings); setSettingsMessage('Privacy settings saved.'); }
+    catch (e) { setSettingsMessage(e.message); } finally { setBusy(false); }
+  }
+  async function loadBlockedUsers() { try { const d = await api('/api/blocks'); setBlockedUsers(d.blocks || []); } catch (e) { setError(e.message); } }
+  async function unblockUser(id) {
+    try { await post('/api/blocks', { userId: id, action: 'unblock' }); await loadBlockedUsers(); setSettingsMessage('User unblocked.'); }
+    catch (e) { setSettingsMessage(e.message); }
+  }
+  async function requestAccountDeletion() {
+    if (!window.confirm('Disable this account and start the deletion workflow? Cleanup may require administrator processing.')) return;
+    const confirmation = window.prompt('Type your username to confirm account deletion:');
+    if (confirmation !== user.username) { setSettingsMessage('Username confirmation did not match.'); return; }
+    try { await api('/api/account', { method: 'DELETE', body: JSON.stringify({ confirmation }) }); await onLogout(); }
+    catch (e) { setSettingsMessage(e.message); }
   }
   async function loadComplaints() { try { const d = await api('/api/complaints'); setMyComplaints(d.complaints || []); } catch (e) { setError(e.message); } }
   async function submitComplaint(e) { e.preventDefault(); setBusy(true); try { await post('/api/complaints', { subject: complaintSubject, description: complaintDescription }); setComplaintSubject(''); setComplaintDescription(''); await loadComplaints(); setPushState('Complaint submitted.'); } catch (e) { setError(e.message); } finally { setBusy(false); } }
@@ -214,13 +265,13 @@ export default function Chat({ user, onLogout }) {
       <section className="conversation-panel">
         {!activeFriend ? <div className="chat-empty"><span className="empty-logo"><MessageCircle size={32}/></span><h2>Your conversations, your space.</h2><p>Choose a contact or add a friend to begin an encrypted chat.</p><div><ShieldCheck size={16}/> Message content is encrypted in your browser before sending.</div></div> :
           <><div className="conversation-head"><span className="contact-avatar">{activeFriend.fullName.slice(0,1).toUpperCase()}</span><div><strong>{activeFriend.fullName}</strong><small>@{activeFriend.username} · {activeFriend.online?'Online':'Offline'} · <ShieldCheck size={12}/> End-to-end encrypted</small></div></div>
-          <div className="message-list">{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.attachment ? <button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&(Object.keys(m.readBy||{}).length?<CheckCheck className="read-receipt" size={13}/>:Object.keys(m.deliveredTo||{}).length?<CheckCheck size={13}/>:<Check size={13}/>)}</small></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}{isFriendTyping&&<div className="typing-indicator">{activeFriend.fullName} is typing…</div>}</div>
+          <div className="message-list">{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.deletedForEveryone ? <em>This message was deleted.</em> : m.attachment ? <button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&(Object.keys(m.readBy||{}).length?<CheckCheck className="read-receipt" size={13}/>:Object.keys(m.deliveredTo||{}).length?<CheckCheck size={13}/>:<Check size={13}/>)}</small></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}{isFriendTyping&&<div className="typing-indicator">{activeFriend.fullName} is typing…</div>}</div>
           <form className="message-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Write a message…" maxLength={4000} disabled={!remoteKey}/><input ref={fileInput} type="file" className="hidden-file-input" onChange={e=>sendFile(e.target.files?.[0])} aria-label="Attach a file"/><button type="button" className="attach-button" disabled={busy||!remoteKey} onClick={()=>fileInput.current?.click()} aria-label="Attach encrypted file"><Paperclip size={17}/></button><button disabled={busy||!remoteKey||!draft.trim()} aria-label="Send message"><Send size={18}/></button></form>{transferProgress&&<div className="file-transfer"><div><strong>{transferProgress.name}</strong><span>{transferProgress.phase} · {transferProgress.progress}%</span></div><div className="transfer-track"><span style={{width:transferProgress.progress+'%'}}/></div></div>}</>}
         {error&&<div className="chat-notice" role="status">{error}<button onClick={()=>setError('')}>×</button></div>}
         {pushState&&<div className="chat-notice" role="status">{pushState}<button onClick={()=>setPushState('')}>×</button></div>}
       </section>
     </div>
-    {settingsOpen&&<div className="settings-overlay" role="presentation" onClick={e=>{if(e.target===e.currentTarget)setSettingsOpen(false)}}><section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div className="settings-modal-head"><div><h2 id="settings-title">User settings</h2><p>Account controls and support</p></div><button className="chat-icon-btn" onClick={()=>setSettingsOpen(false)} aria-label="Close settings">×</button></div><div className="settings-profile"><span className="user-avatar">{(user.fullName||'U').slice(0,1).toUpperCase()}</span><div><strong>{user.fullName}</strong><small>{user.email}</small><small>@{user.username}</small></div></div><h3>Submit a complaint</h3><form className="complaint-form" onSubmit={submitComplaint}><input value={complaintSubject} onChange={e=>setComplaintSubject(e.target.value)} placeholder="Subject" minLength={4} maxLength={120} required/><textarea value={complaintDescription} onChange={e=>setComplaintDescription(e.target.value)} placeholder="Describe your issue (10–3000 characters)" minLength={10} maxLength={3000} required rows={3}/><button className="submit-btn" disabled={busy}>Send complaint</button></form><h3>Your complaints</h3><div className="user-complaints">{myComplaints.length?myComplaints.map(c=><article key={c.id}><strong>{c.subject}</strong><span className={'admin-status '+(c.status==='resolved'?'active':'blocked')}>{c.status}</span><p>{c.description}</p></article>):<p>No complaints submitted.</p>}</div><button className="settings-logout" onClick={onLogout}><LogOut size={16}/> Log out of MS Chat</button></section></div>}
+    {settingsOpen&&<div className="settings-overlay" role="presentation" onClick={e=>{if(e.target===e.currentTarget)setSettingsOpen(false)}}><section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div className="settings-modal-head"><div><h2 id="settings-title">User settings</h2><p>Account controls and support</p></div><button className="chat-icon-btn" onClick={()=>setSettingsOpen(false)} aria-label="Close settings">×</button></div><div className="settings-profile"><span className="user-avatar">{(user.fullName||'U').slice(0,1).toUpperCase()}</span><div><strong>{user.fullName}</strong><small>{user.email}</small><small>@{user.username}</small></div></div><h3>Profile</h3><form className="complaint-form" onSubmit={saveProfile}><input value={profileName} onChange={e=>setProfileName(e.target.value)} minLength={2} maxLength={80} aria-label="Full name" required/><textarea value={profileBio} onChange={e=>setProfileBio(e.target.value)} placeholder="Short bio (optional)" maxLength={280} rows={2}/><label>Date of birth (private)<input type="date" value={profileDob} onChange={e=>setProfileDob(e.target.value)} max={new Date().toISOString().slice(0,10)}/></label><button className="submit-btn" disabled={busy}>Save profile</button></form><h3>Privacy & notifications</h3><div className="complaint-form"><label>Last seen<select value={privacySettings.lastSeenVisibility} onChange={e=>setPrivacySettings(s=>({...s,lastSeenVisibility:e.target.value}))}><option value="everyone">Everyone</option><option value="friends">Friends</option><option value="nobody">Nobody</option></select></label><label>Online status<select value={privacySettings.onlineVisibility} onChange={e=>setPrivacySettings(s=>({...s,onlineVisibility:e.target.value}))}><option value="everyone">Everyone</option><option value="friends">Friends</option><option value="nobody">Nobody</option></select></label><label><input type="checkbox" checked={privacySettings.readReceiptsEnabled} onChange={e=>setPrivacySettings(s=>({...s,readReceiptsEnabled:e.target.checked}))}/> Read receipts enabled</label><label><input type="checkbox" checked={privacySettings.notificationsEnabled} onChange={e=>setPrivacySettings(s=>({...s,notificationsEnabled:e.target.checked}))}/> Notifications enabled</label><label>Notification content<select value={privacySettings.notificationPrivacy} onChange={e=>setPrivacySettings(s=>({...s,notificationPrivacy:e.target.value}))}><option value="generic">Generic preview</option><option value="sender">Show sender name (metadata exposed)</option></select></label><button className="submit-btn" type="button" onClick={savePrivacySettings} disabled={busy}>Save privacy settings</button></div><h3>Blocked users</h3><div className="user-complaints">{blockedUsers.length ? blockedUsers.map(b=><article key={b.id}><strong>@{b.username}</strong><span>{b.fullName}</span><button type="button" className="admin-action" onClick={()=>unblockUser(b.id)}>Unblock</button></article>):<p>No blocked users.</p>}</div>{settingsMessage&&<div className="notice" role="status">{settingsMessage}</div>}<button className="settings-logout" onClick={requestAccountDeletion}>Request account deletion</button><h3>Submit a complaint</h3><form className="complaint-form" onSubmit={submitComplaint}><input value={complaintSubject} onChange={e=>setComplaintSubject(e.target.value)} placeholder="Subject" minLength={4} maxLength={120} required/><textarea value={complaintDescription} onChange={e=>setComplaintDescription(e.target.value)} placeholder="Describe your issue (10–3000 characters)" minLength={10} maxLength={3000} required rows={3}/><button className="submit-btn" disabled={busy}>Send complaint</button></form><h3>Your complaints</h3><div className="user-complaints">{myComplaints.length?myComplaints.map(c=><article key={c.id}><strong>{c.subject}</strong><span className={'admin-status '+(c.status==='resolved'?'active':'blocked')}>{c.status}</span><p>{c.description}</p></article>):<p>No complaints submitted.</p>}</div><button className="settings-logout" onClick={onLogout}><LogOut size={16}/> Log out of MS Chat</button></section></div>}
     <footer className="chat-footer"><span><ShieldCheck size={14}/> Encrypted on this device</span><span>MS Chat · Settings & logout are available from your profile controls</span></footer>
   </main>;
 }
