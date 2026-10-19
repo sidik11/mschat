@@ -55,8 +55,8 @@ export function getOrCreateDeviceKey(userId) {
 export async function getConversationAesKey(privateKey, remotePublicJwk) {
   const remotePublic = await crypto.subtle.importKey('jwk', remotePublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: remotePublic }, privateKey, 256);
-  const digest = await crypto.subtle.digest('SHA-256', bits);
-  return crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  const material = await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('MS Chat ECDH v1'), info: new TextEncoder().encode('MS Chat conversation encryption key') }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 export async function encryptText(key, text) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
