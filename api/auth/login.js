@@ -1,4 +1,4 @@
-import { json, method, requireOrigin, rootRef, normalizeEmail, normalizeUsername, sha, verifyPassword, issueSession, consumeRateLimit, rateLimitKey, safeError, publicUser } from '../_lib/core.js';
+import { json, method, requireOrigin, rootRef, normalizeEmail, normalizeUsername, sha, verifyPassword, issueSession, consumeRateLimit, rateLimitKey, safeError, publicUser } from '../../lib/core.js';
 export default async function handler(req, res) {
   if (!method(req, res, ['POST']) || !requireOrigin(req, res)) return;
   try {
