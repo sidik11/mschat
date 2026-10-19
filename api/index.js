@@ -49,13 +49,18 @@ const routes = new Map([
 
 function routeName(req) {
   const path = new URL(req.url || '/', 'http://localhost').pathname;
-  const directRoute = path.replace(/^\\/api\\/?/, '').replace(/^\\/+|\\/+$/g, '');
+  let directRoute = path.startsWith('/api/') ? path.slice(5) : '';
+  while (directRoute.startsWith('/')) directRoute = directRoute.slice(1);
+  while (directRoute.endsWith('/')) directRoute = directRoute.slice(0, -1);
   if (directRoute && directRoute !== 'index') return directRoute;
   let value = req.query?.route;
   if (Array.isArray(value)) value = value[0];
   if (!value) value = directRoute;
   try { value = decodeURIComponent(String(value || '')); } catch {}
-  return value.replace(/^\\/+|\\/+$/g, '');
+  value = String(value || '');
+  while (value.startsWith('/')) value = value.slice(1);
+  while (value.endsWith('/')) value = value.slice(0, -1);
+  return value;
 }
 
 export default async function handler(req, res) {
