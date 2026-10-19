@@ -73,12 +73,12 @@ export default function Chat({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
-    const heartbeat = () => { if (document.visibilityState === 'visible') post('/api/presence', {}).catch(() => {}); };
+    const heartbeat = () => { if (document.visibilityState === 'visible') post('/api/presence', { conversationId: activeFriend?.conversationId || '' }).catch(() => {}); };
     heartbeat();
     const timer = setInterval(heartbeat, 45000);
     document.addEventListener('visibilitychange', heartbeat);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', heartbeat); };
-  }, []);
+  }, [activeFriend?.conversationId]);
 
   useEffect(() => {
     const timer = setInterval(() => refresh().catch(() => {}), 30000);
@@ -234,7 +234,16 @@ export default function Chat({ user, onLogout }) {
   }
   async function savePrivacySettings() {
     setBusy(true); setSettingsMessage('');
-    try { const data = await post('/api/settings', privacySettings); setPrivacySettings(data.settings); setSettingsMessage('Privacy settings saved.'); }
+    try {
+      if (privacySettings.notificationsEnabled) {
+        if (Notification.permission !== 'granted') { setBusy(false); await enableNotifications(); return; }
+      } else if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration('/');
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription) { await api('/api/push/subscribe', { method: 'DELETE', body: JSON.stringify(subscription.toJSON()) }); await subscription.unsubscribe(); }
+      }
+      const data = await post('/api/settings', privacySettings); setPrivacySettings(data.settings); setSettingsMessage('Privacy settings saved.');
+    }
     catch (e) { setSettingsMessage(e.message); } finally { setBusy(false); }
   }
   async function loadBlockedUsers() { try { const d = await api('/api/blocks'); setBlockedUsers(d.blocks || []); } catch (e) { setError(e.message); } }
@@ -288,6 +297,8 @@ export default function Chat({ user, onLogout }) {
       const registration = await navigator.serviceWorker.register('/sw.js');
       const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(atob(key.publicKey.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0)) });
       await post('/api/push/subscribe', subscription.toJSON());
+      await post('/api/settings', { notificationsEnabled: true });
+      setPrivacySettings(s=>({...s,notificationsEnabled:true}));
       setPushState('Notifications enabled');
     } catch (e) { setPushState(e.message); }
   }
