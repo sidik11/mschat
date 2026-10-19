@@ -26,3 +26,10 @@ test('health route works without requiring configured integrations', async () =>
   assert.equal(res.body.ok, true);
   assert.equal(res.body.service, 'mschat-api');
 });
+
+test('API dispatcher also resolves direct endpoint paths', async () => {
+  const res = response();
+  await handler({ method: 'GET', query: {}, url: '/api/health' }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.service, 'mschat-api');
+});
