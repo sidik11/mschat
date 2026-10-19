@@ -25,6 +25,10 @@ export default function Chat({ user, onLogout }) {
   const [remoteKey, setRemoteKey] = useState(null);
   const [search, setSearch] = useState('');
   const [transferProgress, setTransferProgress] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [complaintSubject, setComplaintSubject] = useState('');
+  const [complaintDescription, setComplaintDescription] = useState('');
+  const [myComplaints, setMyComplaints] = useState([]);
   const fileInput = useRef(null);
   const [pushState, setPushState] = useState('');
   const activeFriend = useMemo(() => friends.find(f => f.id === active) || null, [friends, active]);
@@ -155,6 +159,8 @@ export default function Chat({ user, onLogout }) {
       setDraft('');
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
+  async function loadComplaints() { try { const d = await api('/api/complaints'); setMyComplaints(d.complaints || []); } catch (e) { setError(e.message); } }
+  async function submitComplaint(e) { e.preventDefault(); setBusy(true); try { await post('/api/complaints', { subject: complaintSubject, description: complaintDescription }); setComplaintSubject(''); setComplaintDescription(''); await loadComplaints(); setPushState('Complaint submitted.'); } catch (e) { setError(e.message); } finally { setBusy(false); } }
   async function enableNotifications() {
     try {
       if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) throw new Error('Push notifications are not supported by this browser.');
@@ -171,7 +177,7 @@ export default function Chat({ user, onLogout }) {
   const visibleFriends = friends.filter(f => (f.fullName + ' ' + f.username).toLowerCase().includes(search.toLowerCase()));
 
   return <main className="chat-app">
-    <header className="chat-topbar"><a className="brand" href="/"><span className="brand-mark"><MessageCircle size={21}/></span><span>ms<span className="brand-light">chat</span><i>.</i></span></a><div className="chat-user"><span className="user-avatar">{(user.fullName || 'U').slice(0,1).toUpperCase()}</span><span>{user.fullName}</span><button className="chat-icon-btn" onClick={enableNotifications} title="Enable notifications"><Bell size={17}/></button><button className="chat-icon-btn" onClick={onLogout} title="Logout"><LogOut size={17}/></button></div></header>
+    <header className="chat-topbar"><a className="brand" href="/"><span className="brand-mark"><MessageCircle size={21}/></span><span>ms<span className="brand-light">chat</span><i>.</i></span></a><div className="chat-user"><span className="user-avatar">{(user.fullName || 'U').slice(0,1).toUpperCase()}</span><span>{user.fullName}</span><button className="chat-icon-btn" onClick={enableNotifications} title="Enable notifications"><Bell size={17}/></button><button className="chat-icon-btn" onClick={()=>{setSettingsOpen(true);loadComplaints()}} title="User settings"><Settings size={17}/></button><button className="chat-icon-btn" onClick={onLogout} title="Logout"><LogOut size={17}/></button></div></header>
     <div className="chat-layout">
       <aside className="contacts-panel">
         <div className="panel-heading"><div><h2>Messages</h2><p>Private one-to-one chats</p></div><span className="online-pill"><span/> Protected</span></div>
@@ -190,6 +196,7 @@ export default function Chat({ user, onLogout }) {
         {pushState&&<div className="chat-notice" role="status">{pushState}<button onClick={()=>setPushState('')}>×</button></div>}
       </section>
     </div>
+    {settingsOpen&&<div className="settings-overlay" role="presentation" onClick={e=>{if(e.target===e.currentTarget)setSettingsOpen(false)}}><section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div className="settings-modal-head"><div><h2 id="settings-title">User settings</h2><p>Account controls and support</p></div><button className="chat-icon-btn" onClick={()=>setSettingsOpen(false)} aria-label="Close settings">×</button></div><div className="settings-profile"><span className="user-avatar">{(user.fullName||'U').slice(0,1).toUpperCase()}</span><div><strong>{user.fullName}</strong><small>{user.email}</small><small>@{user.username}</small></div></div><h3>Submit a complaint</h3><form className="complaint-form" onSubmit={submitComplaint}><input value={complaintSubject} onChange={e=>setComplaintSubject(e.target.value)} placeholder="Subject" minLength={4} maxLength={120} required/><textarea value={complaintDescription} onChange={e=>setComplaintDescription(e.target.value)} placeholder="Describe your issue (10–3000 characters)" minLength={10} maxLength={3000} required rows={3}/><button className="submit-btn" disabled={busy}>Send complaint</button></form><h3>Your complaints</h3><div className="user-complaints">{myComplaints.length?myComplaints.map(c=><article key={c.id}><strong>{c.subject}</strong><span className={'admin-status '+(c.status==='resolved'?'active':'blocked')}>{c.status}</span><p>{c.description}</p></article>):<p>No complaints submitted.</p>}</div><button className="settings-logout" onClick={onLogout}><LogOut size={16}/> Log out of MS Chat</button></section></div>}
     <footer className="chat-footer"><span><ShieldCheck size={14}/> Encrypted on this device</span><span>MS Chat · Settings & logout are available from your profile controls</span></footer>
   </main>;
 }
