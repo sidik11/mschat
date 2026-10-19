@@ -145,7 +145,7 @@ export default function Chat({ user, onLogout }) {
       } catch (e) { if (!cancelled) { setMessages([]); setError(e.message); } }
     })();
     return () => { cancelled = true; };
-  }, [active, friends, privateKey]);
+  }, [activeFriend?.conversationId, activeFriend?.username, privateKey]);
 
   useEffect(() => {
     if (!activeFriend || !remoteKey) return;
@@ -162,8 +162,7 @@ export default function Chat({ user, onLogout }) {
           } catch { return { ...m, text: 'Unable to decrypt on this device' }; }
         }));
         if (cancelled) return;
-        setMessages(decoded);
-        if ((data.messages || []).length === 100) setOlderMessageCursor(data.nextCursor || null);
+        setMessages(current => { const latestIds = new Set(decoded.map(m => m.id)); return [...current.filter(m => !latestIds.has(m.id)), ...decoded]; });
         const typingState = await api('/api/typing?conversationId=' + encodeURIComponent(activeFriend.conversationId));
         if (!cancelled) setIsFriendTyping(Boolean(typingState.typing));
         const unreadIds = new Set(data.unreadMessageIds || []);
@@ -179,7 +178,7 @@ export default function Chat({ user, onLogout }) {
     poll();
     const timer = setInterval(() => { if (document.visibilityState === 'visible') poll(); }, 8000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [activeFriend, remoteKey, user.id, privacySettings.readReceiptsEnabled]);
+  }, [activeFriend?.conversationId, remoteKey, user.id, privacySettings.readReceiptsEnabled]);
 
   async function sendFile(file) {
     if (!activeFriend || !remoteKey || !file) return;
