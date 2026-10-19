@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Chat from './Chat.jsx';
+import Admin from './Admin.jsx';
 import { MessageCircle, ShieldCheck, Zap, LockKeyhole, Eye, EyeOff, ArrowRight, Check, Smartphone, Sparkles, Sun, Moon, LoaderCircle } from 'lucide-react';
 
 const features = [
@@ -74,6 +75,7 @@ export default function App() {
   }
 
   if (checkingSession) return <main className="app-shell"><header className="topbar"><a className="brand" href="/"><span className="brand-mark"><MessageCircle size={21}/></span><span>ms<span className="brand-light">chat</span><i>.</i></span></a></header><section className="chat-empty"><span className="empty-logo"><LoaderCircle className="spin" size={28}/></span><h2>Opening your space…</h2><p>Checking your secure session.</p></section></main>;
+  if (authenticatedUser && window.location.pathname.startsWith('/admin')) return <Admin user={authenticatedUser} onLogout={logout} />;
   if (authenticatedUser) return <Chat user={authenticatedUser} onLogout={logout} />;
 
   return <main className="app-shell">
