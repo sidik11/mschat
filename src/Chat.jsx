@@ -32,6 +32,9 @@ export default function Chat({ user, onLogout }) {
   const [search, setSearch] = useState('');
   const [isFriendTyping, setIsFriendTyping] = useState(false);
   const [transferProgress, setTransferProgress] = useState(null);
+  const [attachmentPreview, setAttachmentPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [complaintSubject, setComplaintSubject] = useState('');
   const [complaintDescription, setComplaintDescription] = useState('');
@@ -113,6 +116,14 @@ export default function Chat({ user, onLogout }) {
     document.addEventListener('visibilitychange', heartbeat);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', heartbeat); };
   }, [activeFriend?.conversationId]);
+
+  useEffect(() => {
+    const online = () => setIsOnline(true), offline = () => setIsOnline(false);
+    window.addEventListener('online', online); window.addEventListener('offline', offline);
+    return () => { window.removeEventListener('online', online); window.removeEventListener('offline', offline); };
+  }, []);
+
+  useEffect(() => { return () => { if (attachmentPreview?.url) URL.revokeObjectURL(attachmentPreview.url); }; }, [attachmentPreview?.url]);
 
   useEffect(() => {
     const timer = setInterval(() => refresh().catch(() => {}), 30000);
@@ -212,6 +223,17 @@ export default function Chat({ user, onLogout }) {
       setTimeout(() => setTransferProgress(null), 2500);
     } catch (e) { setError(e.message); setTransferProgress(null); }
     finally { setBusy(false); if (fileInput.current) fileInput.current.value = ''; }
+  }
+  async function viewAttachment(attachment) {
+    if (!remoteKey || !['image','video'].includes(attachment.mediaType)) return;
+    setPreviewLoading(true); setError('');
+    try {
+      const info = await post('/api/attachments/download-url', { attachmentId: attachment.attachmentId });
+      const response = await fetch(info.downloadUrl); if (!response.ok) throw new Error('Could not load the encrypted attachment.');
+      const encrypted = await response.arrayBuffer(), clear = await decryptAttachmentBytes(attachment.fileKey, encrypted, attachment.fileIv);
+      const blob = new Blob([clear], { type: attachment.mimeType || 'application/octet-stream' }), url = URL.createObjectURL(blob);
+      setAttachmentPreview({ url, name: attachment.fileName || 'Attachment', mediaType: attachment.mediaType, mimeType: attachment.mimeType });
+    } catch (e) { setError(e.message); } finally { setPreviewLoading(false); }
   }
   async function downloadFile(attachment) {
     if (!remoteKey) return;
@@ -399,7 +421,7 @@ export default function Chat({ user, onLogout }) {
       <section className="conversation-panel">
         {!activeFriend ? <div className="chat-empty"><span className="empty-logo"><MessageCircle size={32}/></span><h2>Your conversations, your space.</h2><p>Choose a contact or add a friend to begin an encrypted chat.</p><div><ShieldCheck size={16}/> Message content is encrypted in your browser before sending.</div></div> :
           <><div className="conversation-head"><span className="contact-avatar">{activeFriend.avatarUrl ? <img className="avatar-image" src={activeFriend.avatarUrl} alt=""/> : activeFriend.fullName.slice(0,1).toUpperCase()}</span><div><strong>{activeFriend.fullName}</strong><small>@{activeFriend.username} · {activeFriend.online?'Online':'Offline'} · <ShieldCheck size={12}/> Client-side encrypted</small>{remoteFingerprint&&<small className="key-fingerprint">Key fingerprint · verify out of band: {remoteFingerprint.split(' ').slice(0,6).join(' ')}</small>}</div><button className="chat-icon-btn" onClick={removeActiveFriend} aria-label="Remove friend" title="Remove contact"><Users size={16}/></button><button className="chat-icon-btn" onClick={toggleMuteActiveConversation} aria-label={privacySettings.mutedConversations?.[activeFriend.conversationId]?'Unmute conversation':'Mute conversation'} title={privacySettings.mutedConversations?.[activeFriend.conversationId]?'Unmute notifications':'Mute notifications'}><Bell size={16} style={{opacity: privacySettings.mutedConversations?.[activeFriend.conversationId] ? 0.5 : 1}}/></button><button className="chat-icon-btn" onClick={reportActiveFriend} aria-label="Report user" title="Report user"><ShieldCheck size={16}/></button><button className="chat-icon-btn" onClick={blockActiveFriend} aria-label="Block user" title="Block user"><UserRoundX size={16}/></button></div>
-          <div className="message-list">{olderMessageCursor&&<button className="refresh-btn" disabled={loadingOlderMessages} onClick={loadOlderMessages}>{loadingOlderMessages?'Loading…':'Load older messages'}</button>}{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.deletedForEveryone ? <em>This message was deleted.</em> : m.attachment ? <button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&(Object.keys(m.readBy||{}).length?<CheckCheck className="read-receipt" size={13}/>:Object.keys(m.deliveredTo||{}).length?<CheckCheck size={13}/>:<Check size={13}/>)}</small><div className="message-actions"><button type="button" onClick={()=>deleteMessageAction(m,'me')} title="Hide this message for you"><Trash2 size={12}/> Delete for me</button>{m.senderId===user.id&&!m.deletedForEveryone&&Date.now()-m.createdAt<15*60*1000&&<button type="button" onClick={()=>deleteMessageAction(m,'everyone')} title="Delete this message for everyone">Delete for everyone</button>}</div></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}{isFriendTyping&&<div className="typing-indicator">{activeFriend.fullName} is typing…</div>}</div>
+          <div className="message-list">{olderMessageCursor&&<button className="refresh-btn" disabled={loadingOlderMessages} onClick={loadOlderMessages}>{loadingOlderMessages?'Loading…':'Load older messages'}</button>}{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.deletedForEveryone ? <em>This message was deleted.</em> : m.attachment ? <div className="attachment-row"><button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button>{['image','video'].includes(m.attachment.mediaType)&&<button className="attachment-preview" onClick={()=>viewAttachment(m.attachment)} disabled={previewLoading}>{previewLoading?'Loading…':'View'}</button>}</div> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&(Object.keys(m.readBy||{}).length?<CheckCheck className="read-receipt" size={13}/>:Object.keys(m.deliveredTo||{}).length?<CheckCheck size={13}/>:<Check size={13}/>)}</small><div className="message-actions"><button type="button" onClick={()=>deleteMessageAction(m,'me')} title="Hide this message for you"><Trash2 size={12}/> Delete for me</button>{m.senderId===user.id&&!m.deletedForEveryone&&Date.now()-m.createdAt<15*60*1000&&<button type="button" onClick={()=>deleteMessageAction(m,'everyone')} title="Delete this message for everyone">Delete for everyone</button>}</div></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}{isFriendTyping&&<div className="typing-indicator">{activeFriend.fullName} is typing…</div>}</div>
           <form className="message-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Write a message…" maxLength={4000} disabled={!remoteKey}/><input ref={fileInput} type="file" accept="image/*,video/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" className="hidden-file-input" onChange={e=>sendFile(e.target.files?.[0])} aria-label="Attach a file"/><button type="button" className="attach-button" disabled={busy||!remoteKey} onClick={()=>fileInput.current?.click()} aria-label="Attach encrypted file"><Paperclip size={17}/></button><button disabled={busy||!remoteKey||!draft.trim()} aria-label="Send message"><Send size={18}/></button></form>{transferProgress&&<div className="file-transfer"><div><strong>{transferProgress.name}</strong><span>{transferProgress.phase} · {transferProgress.progress}%</span></div><div className="transfer-track"><span style={{width:transferProgress.progress+'%'}}/></div></div>}</>}
         {error&&<div className="chat-notice" role="status">{error}<button onClick={()=>setError('')}>×</button></div>}
         {pushState&&<div className="chat-notice" role="status">{pushState}<button onClick={()=>setPushState('')}>×</button></div>}
