@@ -63,7 +63,10 @@ export default function App() {
           : { identity: form.email.trim(), password: form.password })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'This service is not configured yet. Please try again later.');
+      if (!response.ok) {
+        const friendly = { EMAIL_ALREADY_REGISTERED: 'An account already uses this email address.', USERNAME_TAKEN: 'That username is already taken.', INVALID_CREDENTIALS: 'Email/username or password is incorrect.', OTP_EXPIRED_OR_MISSING: 'Request a new email verification code.', INVALID_CODE: 'The verification code is incorrect.', RATE_LIMITED: 'Too many attempts. Wait a little and try again.', SERVICE_NOT_CONFIGURED: 'The server is missing required environment variables.' };
+        throw new Error(data.message || friendly[data.error] || data.error || 'This service is not configured yet. Please try again later.');
+      }
       if (data.user) { setAuthenticatedUser(data.user); return; }
       setNoticeType('success');
       setNotice(data.message || 'Signed in successfully.');
