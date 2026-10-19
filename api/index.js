@@ -29,6 +29,7 @@ import reports from '../lib/handlers/reports.js';
 import account from '../lib/handlers/account.js';
 import deleteMessage from '../lib/handlers/messages/delete.js';
 import conversations from '../lib/handlers/conversations.js';
+import security from '../lib/handlers/security.js';
 
 const routes = new Map([
   ['auth/request-otp', requestOtp],
@@ -60,7 +61,8 @@ const routes = new Map([
   ['reports', reports],
   ['account', account],
   ['messages/delete', deleteMessage],
-  ['conversations', conversations]
+  ['conversations', conversations],
+  ['security', security]
 ]);
 
 function routeName(req) {
