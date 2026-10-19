@@ -1,6 +1,6 @@
 # MS Chat
 
-MS Chat is a mobile-first one-to-one messaging application using React/Vite, Vercel serverless APIs, Firebase Realtime Database (Admin SDK only), Gmail API OTP, Cloudflare R2, Web Push, and Web Crypto.
+MS Chat is a mobile-first one-to-one messaging application using React/Vite, a single Vercel serverless API dispatcher, Firebase Realtime Database (Admin SDK only), Gmail API OTP, Cloudflare R2, Web Push, and Web Crypto.
 
 ## Implemented in this branch
 
@@ -11,7 +11,7 @@ MS Chat is a mobile-first one-to-one messaging application using React/Vite, Ver
 - Web Push subscription storage and generic push notifications that do not expose message contents.
 - Responsive purple/black/white UI, light/dark theme preference in localStorage, user settings, logout, complaint submission, admin dashboard, account blocking, and complaint resolution.
 - PWA manifest and service worker.
-- CI workflow runs tests and the production build on feature branches.
+- A single API dispatcher keeps the deployment below Vercel Hobby's serverless-function count limit; CI workflow runs tests and the production build on feature branches.
 
 ## Local development
 
