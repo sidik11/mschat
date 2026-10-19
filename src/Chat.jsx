@@ -116,6 +116,7 @@ export default function Chat({ user, onLogout }) {
     if (!activeFriend || !remoteKey) return;
     let cancelled = false;
     const poll = async () => {
+      if (document.visibilityState !== 'visible') return;
       try {
         const data = await api('/api/messages?conversationId=' + encodeURIComponent(activeFriend.conversationId));
         const decoded = await Promise.all((data.messages || []).map(async m => {
@@ -129,11 +130,11 @@ export default function Chat({ user, onLogout }) {
         setMessages(decoded);
         const typingState = await api('/api/typing?conversationId=' + encodeURIComponent(activeFriend.conversationId));
         if (!cancelled) setIsFriendTyping(Boolean(typingState.typing));
-        const unread = decoded.filter(m => m.senderId !== user.id && !m.readBy?.[user.id]);
+        const unread = decoded.filter(m => m.senderId !== user.id && !m.deletedForEveryone);
         for (const m of unread) {
           try {
-            await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'delivered' });
-            await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'read' });
+            if (!m.deliveredTo?.[user.id]) await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'delivered' });
+            if (privacySettings.readReceiptsEnabled && !m.readBy?.[user.id]) await post('/api/messages/receipt', { conversationId: activeFriend.conversationId, messageId: m.id, state: 'read' });
           } catch {}
         }
       } catch {}
@@ -141,7 +142,7 @@ export default function Chat({ user, onLogout }) {
     poll();
     const timer = setInterval(() => { if (document.visibilityState === 'visible') poll(); }, 8000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [activeFriend, remoteKey, user.id]);
+  }, [activeFriend, remoteKey, user.id, privacySettings.readReceiptsEnabled]);
 
   async function sendFile(file) {
     if (!activeFriend || !remoteKey || !file) return;
