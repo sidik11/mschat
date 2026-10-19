@@ -1,5 +1,5 @@
-import { json, method, requireOrigin, session, rootRef, safeError } from '../_lib/core.js';
-import { r2Client, objectExists } from './_r2.js';
+import { json, method, requireOrigin, session, rootRef, safeError } from '../../lib/core.js';
+import { r2Client, objectExists } from '../../lib/r2.js';
 export default async function handler(req, res) {
   if (!method(req, res, ['POST']) || !requireOrigin(req, res)) return;
   try {
