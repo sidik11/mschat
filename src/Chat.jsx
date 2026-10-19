@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { LogOut, Plus, Send, MessageCircle, ShieldCheck, Users, CheckCheck, Bell, RefreshCw, Search } from 'lucide-react';
-import { getOrCreateDeviceKey, getConversationAesKey, encryptText, decryptText } from './chat-crypto.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { LogOut, Plus, Send, MessageCircle, ShieldCheck, Users, CheckCheck, Bell, RefreshCw, Search, Paperclip, Download, FileText, Settings } from 'lucide-react';
+import { getOrCreateDeviceKey, getConversationAesKey, encryptText, decryptText, encryptBytes, decryptBytes } from './chat-crypto.js';
 
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: 'include', ...options, headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) } });
@@ -9,6 +9,7 @@ async function api(url, options = {}) {
   return data;
 }
 const post = (url, body) => api(url, { method: 'POST', body: JSON.stringify(body) });
+function uploadWithProgress(url, buffer, onProgress) { return new Promise((resolve, reject) => { const xhr = new XMLHttpRequest(); xhr.open('PUT', url); xhr.setRequestHeader('Content-Type', 'application/octet-stream'); xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100)); }; xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('File upload failed (' + xhr.status + ').')); xhr.onerror = () => reject(new Error('Network error during upload.')); xhr.send(buffer); }); }
 
 export default function Chat({ user, onLogout }) {
   const [friends, setFriends] = useState([]);
@@ -23,6 +24,8 @@ export default function Chat({ user, onLogout }) {
   const [myPublicKey, setMyPublicKey] = useState(null);
   const [remoteKey, setRemoteKey] = useState(null);
   const [search, setSearch] = useState('');
+  const [transferProgress, setTransferProgress] = useState(null);
+  const fileInput = useRef(null);
   const [pushState, setPushState] = useState('');
   const activeFriend = useMemo(() => friends.find(f => f.id === active) || null, [friends, active]);
 
@@ -57,8 +60,11 @@ export default function Chat({ user, onLogout }) {
         setRemoteKey(key);
         const data = await api('/api/messages?conversationId=' + encodeURIComponent(activeFriend.conversationId));
         const decoded = await Promise.all((data.messages || []).map(async m => {
-          try { return { ...m, text: await decryptText(key, m.ciphertext, m.iv) }; }
-          catch { return { ...m, text: 'Unable to decrypt on this device' }; }
+          try {
+            const clear = await decryptText(key, m.ciphertext, m.iv);
+            try { const payload = JSON.parse(clear); if (payload?.type === 'attachment' && /^[a-f0-9]{32}$/.test(payload.attachmentId || '')) return { ...m, text: payload.fileName || 'Encrypted attachment', attachment: payload }; } catch {}
+            return { ...m, text: clear };
+          } catch { return { ...m, text: 'Unable to decrypt on this device' }; }
         }));
         if (!cancelled) setMessages(decoded);
       } catch (e) { if (!cancelled) { setMessages([]); setError(e.message); } }
@@ -73,8 +79,11 @@ export default function Chat({ user, onLogout }) {
       try {
         const data = await api('/api/messages?conversationId=' + encodeURIComponent(activeFriend.conversationId));
         const decoded = await Promise.all((data.messages || []).map(async m => {
-          try { return { ...m, text: await decryptText(remoteKey, m.ciphertext, m.iv) }; }
-          catch { return { ...m, text: 'Unable to decrypt on this device' }; }
+          try {
+            const clear = await decryptText(remoteKey, m.ciphertext, m.iv);
+            try { const payload = JSON.parse(clear); if (payload?.type === 'attachment' && /^[a-f0-9]{32}$/.test(payload.attachmentId || '')) return { ...m, text: payload.fileName || 'Encrypted attachment', attachment: payload }; } catch {}
+            return { ...m, text: clear };
+          } catch { return { ...m, text: 'Unable to decrypt on this device' }; }
         }));
         if (cancelled) return;
         setMessages(decoded);
@@ -90,6 +99,41 @@ export default function Chat({ user, onLogout }) {
     const timer = setInterval(poll, 3000);
     return () => { cancelled = true; clearInterval(timer); };
   }, [activeFriend, remoteKey, user.id]);
+
+  async function sendFile(file) {
+    if (!activeFriend || !remoteKey || !file) return;
+    if (file.size < 1 || file.size > 25 * 1024 * 1024) { setError('Choose a file between 1 byte and 25 MB.'); return; }
+    setBusy(true); setError(''); setTransferProgress({ name: file.name, progress: 0, phase: 'Encrypting locally' });
+    try {
+      const encrypted = await encryptBytes(remoteKey, await file.arrayBuffer());
+      setTransferProgress({ name: file.name, progress: 5, phase: 'Preparing private upload' });
+      const upload = await post('/api/attachments/upload-url', { conversationId: activeFriend.conversationId, fileName: file.name, size: file.size });
+      await uploadWithProgress(upload.uploadUrl, encrypted.buffer, progress => setTransferProgress({ name: file.name, progress, phase: 'Uploading encrypted file' }));
+      const complete = await post('/api/attachments/complete', { attachmentId: upload.attachmentId });
+      const payload = { type: 'attachment', attachmentId: complete.attachment.id, fileName: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, fileIv: encrypted.iv };
+      const encryptedMessage = await encryptText(remoteKey, JSON.stringify(payload));
+      const result = await post('/api/messages', { conversationId: activeFriend.conversationId, ...encryptedMessage, keyVersion: 1 });
+      setMessages(old => [...old, { id: result.id, senderId: user.id, text: file.name, attachment: payload, createdAt: result.createdAt, deliveredTo: {}, readBy: {} }]);
+      setTransferProgress({ name: file.name, progress: 100, phase: 'Sent securely' });
+      setTimeout(() => setTransferProgress(null), 2500);
+    } catch (e) { setError(e.message); setTransferProgress(null); }
+    finally { setBusy(false); if (fileInput.current) fileInput.current.value = ''; }
+  }
+  async function downloadFile(attachment) {
+    if (!remoteKey) return;
+    setError('');
+    try {
+      const info = await post('/api/attachments/download-url', { attachmentId: attachment.attachmentId });
+      const response = await fetch(info.downloadUrl);
+      if (!response.ok) throw new Error('Could not download the encrypted file.');
+      const encrypted = await response.arrayBuffer();
+      const clear = await decryptBytes(remoteKey, encrypted, attachment.fileIv);
+      const blob = new Blob([clear], { type: attachment.mimeType || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob), a = document.createElement('a');
+      a.href = url; a.download = attachment.fileName || 'attachment'; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { setError(e.message); }
+  }
 
   async function addFriend(e) {
     e.preventDefault(); setError(''); setBusy(true);
@@ -140,8 +184,8 @@ export default function Chat({ user, onLogout }) {
       <section className="conversation-panel">
         {!activeFriend ? <div className="chat-empty"><span className="empty-logo"><MessageCircle size={32}/></span><h2>Your conversations, your space.</h2><p>Choose a contact or add a friend to begin an encrypted chat.</p><div><ShieldCheck size={16}/> Message content is encrypted in your browser before sending.</div></div> :
           <><div className="conversation-head"><span className="contact-avatar">{activeFriend.fullName.slice(0,1).toUpperCase()}</span><div><strong>{activeFriend.fullName}</strong><small>@{activeFriend.username} · <ShieldCheck size={12}/> End-to-end encrypted</small></div></div>
-          <div className="message-list">{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&<CheckCheck size={13} style={{opacity:Object.keys(m.readBy||{}).length?1:Object.keys(m.deliveredTo||{}).length?.75:.45}}/>}</small></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}</div>
-          <form className="message-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Write a message…" maxLength={4000} disabled={!remoteKey}/><button disabled={busy||!remoteKey||!draft.trim()} aria-label="Send message"><Send size={18}/></button></form></>}
+          <div className="message-list">{messages.map(m=><div key={m.id} className={'message-row '+(m.senderId===user.id?'mine':'theirs')}><div className="message-bubble">{m.attachment ? <button className="attachment-message" onClick={()=>downloadFile(m.attachment)}><FileText size={17}/><span><strong>{m.attachment.fileName}</strong><small>{Math.max(1,Math.round(m.attachment.size/1024))} KB · encrypted file</small></span><Download size={15}/></button> : m.text}<small>{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}{m.senderId===user.id&&<CheckCheck size={13} style={{opacity:Object.keys(m.readBy||{}).length?1:Object.keys(m.deliveredTo||{}).length?.75:.45}}/>}</small></div></div>)}{messages.length===0&&<div className="conversation-hint">Messages are encrypted before they leave your device.</div>}</div>
+          <form className="message-compose" onSubmit={send}><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Write a message…" maxLength={4000} disabled={!remoteKey}/><input ref={fileInput} type="file" className="hidden-file-input" onChange={e=>sendFile(e.target.files?.[0])} aria-label="Attach a file"/><button type="button" className="attach-button" disabled={busy||!remoteKey} onClick={()=>fileInput.current?.click()} aria-label="Attach encrypted file"><Paperclip size={17}/></button><button disabled={busy||!remoteKey||!draft.trim()} aria-label="Send message"><Send size={18}/></button></form>{transferProgress&&<div className="file-transfer"><div><strong>{transferProgress.name}</strong><span>{transferProgress.phase} · {transferProgress.progress}%</span></div><div className="transfer-track"><span style={{width:transferProgress.progress+'%'}}/></div></div>}</>}
         {error&&<div className="chat-notice" role="status">{error}<button onClick={()=>setError('')}>×</button></div>}
         {pushState&&<div className="chat-notice" role="status">{pushState}<button onClick={()=>setPushState('')}>×</button></div>}
       </section>
