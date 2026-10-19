@@ -68,7 +68,7 @@ export default function App() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const friendly = { EMAIL_ALREADY_REGISTERED: 'An account already uses this email address.', USERNAME_TAKEN: 'That username is already taken.', INVALID_CREDENTIALS: 'Email/username or password is incorrect.', OTP_EXPIRED_OR_MISSING: 'Request a new email verification code.', INVALID_CODE: 'The verification code is incorrect.', RATE_LIMITED: 'Too many attempts. Wait a little and try again.', SERVICE_NOT_CONFIGURED: 'The server is missing required environment variables.' };
+        const friendly = { ACCOUNT_UNAVAILABLE: 'Account could not be created. Check the details or try signing in.', EMAIL_ALREADY_REGISTERED: 'Account could not be created. Check the details or try signing in.', USERNAME_TAKEN: 'Account could not be created. Check the details or try signing in.', INVALID_CREDENTIALS: 'Email/username or password is incorrect.', OTP_EXPIRED_OR_MISSING: 'Request a new email verification code.', INVALID_CODE: 'The verification code is incorrect.', RATE_LIMITED: 'Too many attempts. Wait a little and try again.', SERVICE_NOT_CONFIGURED: 'The server is missing required environment variables.' };
         throw new Error(data.message || friendly[data.error] || data.error || 'This service is not configured yet. Please try again later.');
       }
       if (data.requiresAdminOtp) { setAdminOtpRequired(true); setNoticeType('success'); setNotice(data.message || 'Enter the administrator verification code sent to your email.'); return; }
