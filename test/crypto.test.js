@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getConversationAesKey, encryptText, decryptText, encryptBytes, decryptBytes } from '../src/chat-crypto.js';
+import { getConversationAesKey, encryptText, decryptText, encryptBytes, decryptBytes, encryptAttachmentBytes, decryptAttachmentBytes } from '../src/chat-crypto.js';
 
 test('ECDH-derived AES keys decrypt messages on both peers', async () => {
   const alice = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
@@ -25,4 +25,15 @@ test('file encryption rejects tampered ciphertext', async () => {
   const tampered = encrypted.buffer.slice(0);
   new Uint8Array(tampered)[0] ^= 1;
   await assert.rejects(() => decryptBytes(key, tampered, encrypted.iv));
+});
+
+test('attachments use random per-file keys delivered only inside the encrypted message', async () => {
+  const plain = new TextEncoder().encode('private attachment payload').buffer;
+  const first = await encryptAttachmentBytes(plain);
+  const second = await encryptAttachmentBytes(plain);
+  assert.notEqual(first.fileKey, second.fileKey);
+  assert.notEqual(first.iv, second.iv);
+  const clear = await decryptAttachmentBytes(first.fileKey, first.buffer, first.iv);
+  assert.equal(new TextDecoder().decode(clear), 'private attachment payload');
+  await assert.rejects(() => decryptAttachmentBytes(second.fileKey, first.buffer, first.iv));
 });
