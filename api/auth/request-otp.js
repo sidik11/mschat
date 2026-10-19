@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { json, method, requireOrigin, rootRef, normalizeEmail, sha, consumeRateLimit, rateLimitKey, sendOtpEmail, safeError } from '../_lib/core.js';
+import { json, method, requireOrigin, rootRef, normalizeEmail, sha, consumeRateLimit, rateLimitKey, sendOtpEmail, safeError } from '../../lib/core.js';
 
 export default async function handler(req, res) {
   if (!method(req, res, ['POST']) || !requireOrigin(req, res)) return;
