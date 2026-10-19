@@ -97,3 +97,16 @@ export async function trustRemoteKey(username, jwk) {
   await setValue('trusted-remote-key:' + username, { fingerprint, pinnedAt: Date.now() });
   return fingerprint;
 }
+
+export async function encryptAttachmentBytes(buffer) {
+  const rawKey = crypto.getRandomValues(new Uint8Array(32));
+  const key = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['encrypt','decrypt']);
+  const encrypted = await encryptBytes(key, buffer);
+  return { ...encrypted, fileKey: b64(rawKey) };
+}
+export async function decryptAttachmentBytes(fileKey, buffer, iv) {
+  const rawKey = fromB64(String(fileKey || ''));
+  if (rawKey.byteLength !== 32) throw new Error('Invalid attachment key');
+  const key = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']);
+  return decryptBytes(key, buffer, iv);
+}
