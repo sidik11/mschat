@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/api/((?!index(?:/|$)).*)",
+      "source": "/api/((?!index$)(?!index/).*)",
       "destination": "/api/index?route=$1"
     },
     {
