@@ -22,6 +22,8 @@ export default function App() {
   const [noticeType, setNoticeType] = useState('info');
   const [otpRequested, setOtpRequested] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const [adminOtpRequired, setAdminOtpRequired] = useState(false);
+  const [adminOtpCode, setAdminOtpCode] = useState('');
 
   useEffect(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
@@ -56,19 +58,21 @@ export default function App() {
         if (!otpResponse.ok) throw new Error(otpData.message || otpData.error || 'Could not request a verification code.');
         setOtpRequested(true); setNoticeType('success'); setNotice('Verification code requested. Check your email and enter the 6-digit code below.'); return;
       }
-      const response = await fetch(`/api/auth/${mode === 'signup' ? 'register' : 'login'}`, {
+      const endpoint = mode === 'signup' ? 'register' : (adminOtpRequired ? 'admin-otp-verify' : 'login');
+      const response = await fetch(`/api/auth/${mode === 'signup' ? 'register' : endpoint}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(mode === 'signup'
           ? { fullName: form.name.trim(), email: form.email.trim(), username: form.username.trim(), password: form.password, dateOfBirth: form.dateOfBirth, ageConfirmed: form.ageConfirmed, code: otpCode }
-          : { identity: form.email.trim(), password: form.password })
+          : adminOtpRequired ? { identity: form.email.trim(), password: form.password, code: adminOtpCode } : { identity: form.email.trim(), password: form.password })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         const friendly = { EMAIL_ALREADY_REGISTERED: 'An account already uses this email address.', USERNAME_TAKEN: 'That username is already taken.', INVALID_CREDENTIALS: 'Email/username or password is incorrect.', OTP_EXPIRED_OR_MISSING: 'Request a new email verification code.', INVALID_CODE: 'The verification code is incorrect.', RATE_LIMITED: 'Too many attempts. Wait a little and try again.', SERVICE_NOT_CONFIGURED: 'The server is missing required environment variables.' };
         throw new Error(data.message || friendly[data.error] || data.error || 'This service is not configured yet. Please try again later.');
       }
-      if (data.user) { setAuthenticatedUser(data.user); return; }
+      if (data.requiresAdminOtp) { setAdminOtpRequired(true); setNoticeType('success'); setNotice(data.message || 'Enter the administrator verification code sent to your email.'); return; }
+      if (data.user) { setAdminOtpRequired(false); setAdminOtpCode(''); setAuthenticatedUser(data.user); return; }
       setNoticeType('success');
       setNotice(data.message || 'Signed in successfully.');
     } catch (error) {
@@ -79,7 +83,7 @@ export default function App() {
 
   async function logout() {
     try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
-    setAuthenticatedUser(null); setMode('login'); setForm({ name: '', email: '', username: '', password: '', dateOfBirth: '', ageConfirmed: false }); setOtpRequested(false); setOtpCode('');
+    setAuthenticatedUser(null); setMode('login'); setForm({ name: '', email: '', username: '', password: '', dateOfBirth: '', ageConfirmed: false }); setOtpRequested(false); setOtpCode(''); setAdminOtpRequired(false); setAdminOtpCode('');
   }
 
   const pathname = window.location.pathname.toLowerCase();
